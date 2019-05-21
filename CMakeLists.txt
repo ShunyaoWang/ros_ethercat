@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 2.8.3)
 project(ros_ethercat_driver)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
-# add_compile_options(-std=c++11)
+ add_compile_options(-std=c++11)
 
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
@@ -10,6 +10,12 @@ project(ros_ethercat_driver)
 find_package(catkin REQUIRED COMPONENTS
   roscpp
   soem
+  controller_interface
+  pluginlib
+  control_toolbox
+  controller_manager
+  hardware_interface
+  transmission_interface
 )
 
 ## System dependencies are found with CMake's conventions
@@ -102,10 +108,10 @@ find_package(catkin REQUIRED COMPONENTS
 ## CATKIN_DEPENDS: catkin_packages dependent projects also need
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
-#  INCLUDE_DIRS include
-#  LIBRARIES ros_ethercat_driver
-#  CATKIN_DEPENDS roscpp soem
-#  DEPENDS system_lib
+  INCLUDE_DIRS include
+  LIBRARIES ros_ethercat_hardware_interface
+  CATKIN_DEPENDS roscpp soem
+  DEPENDS system_lib soem
 )
 
 ###########
@@ -115,14 +121,28 @@ catkin_package(
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
 include_directories(
-# include
+  include
   ${catkin_INCLUDE_DIRS}
+  ${soem_INCLUDE_DIRS}/soem
+  ${balance_controller_INCLUDE_DIRS}
 )
 
 ## Declare a C++ library
-# add_library(${PROJECT_NAME}
-#   src/${PROJECT_NAME}/ros_ethercat_driver.cpp
+ add_library(ros_ethercat_hardware_interface
+   hardware_interface/ros_ethercat_hardware_interface.cpp
+#   test/anydrive_test.c
+ )
+  add_library(anydrive_test
+    test/anydrive_test.c
+  )
+#target_link_libraries(ros_ethercat_hardware_interface
+#  anydrive_test
 # )
+
+ target_link_libraries(ros_ethercat_hardware_interface
+    ${catkin_LIBRARIES}
+  )
+
 
 ## Add cmake target dependencies of the library
 ## as an example, code may need to be generated before libraries
@@ -133,7 +153,8 @@ include_directories(
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
 # add_executable(${PROJECT_NAME}_node src/ros_ethercat_driver_node.cpp)
-
+add_executable(anydrive_test_node test/anydrive_test.c)
+add_executable(hardware_interface_test test/hardware_interface_test.cpp)
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
 ## target back to the shorter version for ease of user use
@@ -145,9 +166,14 @@ include_directories(
 # add_dependencies(${PROJECT_NAME}_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Specify libraries to link a library or executable target against
-# target_link_libraries(${PROJECT_NAME}_node
-#   ${catkin_LIBRARIES}
-# )
+target_link_libraries(anydrive_test_node
+   ${catkin_LIBRARIES}
+ )
+target_link_libraries(hardware_interface_test
+   ${catkin_LIBRARIES}
+   ros_ethercat_hardware_interface
+   anydrive_test
+ )
 
 #############
 ## Install ##
@@ -164,18 +190,18 @@ include_directories(
 # )
 
 ## Mark executables and/or libraries for installation
-# install(TARGETS ${PROJECT_NAME} ${PROJECT_NAME}_node
-#   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-#   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-#   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
-# )
+ install(TARGETS ros_ethercat_hardware_interface #${PROJECT_NAME}
+   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+ )
 
 ## Mark cpp header files for installation
-# install(DIRECTORY include/${PROJECT_NAME}/
-#   DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
+ install(DIRECTORY include/${PROJECT_NAME}/
+   DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
 #   FILES_MATCHING PATTERN "*.h"
 #   PATTERN ".svn" EXCLUDE
-# )
+ )
 
 ## Mark other files for installation (e.g. launch and bag files, etc.)
 # install(FILES

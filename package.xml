@@ -55,11 +55,17 @@
   <build_export_depend>soem</build_export_depend>
   <exec_depend>roscpp</exec_depend>
   <exec_depend>soem</exec_depend>
+  <depend>controller_interface</depend>
+  <depend>pluginlib</depend>
+  <depend>control_toolbox</depend>
+  <depend>controller_manager</depend>
+  <depend>hardware_interface</depend>
+  <depend>transmission_interface</depend>
 
 
   <!-- The export tag contains other, unspecified, tags -->
   <export>
     <!-- Other tools can request additional information be placed here -->
-
+    <ros_ethercat_driver plugin="${prefix}/plugin_descriptions.xml"/>
   </export>
 </package>

@@ -1,0 +1,7 @@
+<library path="lib/ros_ethercat_driver">
+  <class name="ros_ethercat_driver/RobotStateEtherCATHardwareInterface"
+         type="ros_ethercat_driver::RobotStateEtherCATHardwareInterface"
+         base_class_type="hardware_interface::RobotHW">
+    <description>A EtherCAT driver interface with robot state for ROS.</description>
+  </class>
+</library>
