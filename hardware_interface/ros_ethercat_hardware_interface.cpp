@@ -105,6 +105,17 @@ RobotStateEtherCATHardwareInterface::~RobotStateEtherCATHardwareInterface()
   ROS_WARN("EtherCAT HardWare Interface Shutdown");
 }
 
+void RobotStateEtherCATHardwareInterface::shutdown()
+{
+  ros::Duration delay(0.1);
+  while (!DeInitSlaves(SlaveType::ANYDRIVE)) {
+
+      delay.sleep();
+    }
+
+  ecx_close(&ecx_context);
+  ROS_WARN("EtherCAT HardWare Interface Shutdown");
+}
 
 bool RobotStateEtherCATHardwareInterface::init(ros::NodeHandle& root_nh, ros::NodeHandle& robot_hw_nh)
 {
@@ -150,6 +161,17 @@ bool RobotStateEtherCATHardwareInterface::init(ros::NodeHandle& root_nh, ros::No
     }
   ifname = (char *)net_card.c_str();
 
+  std::string urdf_string;
+  if(!root_nh.getParam("/robot_description", urdf_string))
+    {
+      ROS_ERROR("Failed to load urdf from robot_descriptions");
+      return false;
+    }
+  transmission_interface::TransmissionParser::parse(urdf_string, transmissions_);
+  urdf::Model urdf_model;
+  urdf_model.initString(urdf_string);
+  const urdf::Model *const urdf_model_ptr = urdf_model.initString(urdf_string) ? &urdf_model : NULL;
+
   std::string param_name = "/base_balance_controller/joints";
   if(!root_nh.getParam(param_name, joint_names_))
     {
@@ -173,10 +195,56 @@ bool RobotStateEtherCATHardwareInterface::init(ros::NodeHandle& root_nh, ros::No
   joint_position_command_.resize(n_dof_);
   joint_velocity_command_.resize(n_dof_);
   // Initialize values
+  const ros::NodeHandle joint_limit_nh(root_nh);
 
   hardware_interface::JointHandle joint_handle;
   for(unsigned int j = 0;j<n_dof_;j++)
     {
+
+      // Check that this transmission has one joint
+      if(transmissions_[j].joints_.size() == 0)
+      {
+        ROS_WARN_STREAM_NAMED("ros_ethercat_hardware_interface","Transmission " << transmissions_[j].name_
+          << " has no associated joints.");
+        continue;
+      }
+      else if(transmissions_[j].joints_.size() > 1)
+      {
+        ROS_WARN_STREAM_NAMED("ros_ethercat_hardware_interface","Transmission " << transmissions_[j].name_
+          << " has more than one joint. Currently the default robot hardware simulation "
+          << " interface only supports one.");
+        continue;
+      }
+
+      std::vector<std::string> joint_interfaces = transmissions_[j].joints_[0].hardware_interfaces_;
+      if (joint_interfaces.empty() &&
+          !(transmissions_[j].actuators_.empty()) &&
+          !(transmissions_[j].actuators_[0].hardware_interfaces_.empty()))
+      {
+        // TODO: Deprecate HW interface specification in actuators in ROS J
+        joint_interfaces = transmissions_[j].actuators_[0].hardware_interfaces_;
+        ROS_WARN_STREAM_NAMED("ros_ethercat_hardware_interface", "The <hardware_interface> element of tranmission " <<
+          transmissions_[j].name_ << " should be nested inside the <joint> element, not <actuator>. " <<
+          "The transmission will be properly loaded, but please update " <<
+          "your robot model to remain compatible with future versions of the plugin.");
+      }
+      if (joint_interfaces.empty())
+      {
+        ROS_WARN_STREAM_NAMED("ros_ethercat_hardware_interface", "Joint " << transmissions_[j].joints_[0].name_ <<
+          " of transmission " << transmissions_[j].name_ << " does not specify any hardware interface. " <<
+          "Not adding it to the robot hardware simulation.");
+        continue;
+      }
+      else if (joint_interfaces.size() > 1)
+      {
+        ROS_WARN_STREAM_NAMED("ros_ethercat_hardware_interface", "Joint " << transmissions_[j].joints_[0].name_ <<
+          " of transmission " << transmissions_[j].name_ << " specifies multiple hardware interfaces. " <<
+          "Currently the default robot hardware simulation interface only supports one. Using the first entry");
+        //continue;
+      }
+
+      const std::string& hardware_interface = joint_interfaces.front();
+
       joint_position_[j] = 1.0;
       joint_velocity_[j] = 0.0;
       joint_effort_[j] = 1.0;  // N/m for continuous joints
@@ -188,29 +256,46 @@ bool RobotStateEtherCATHardwareInterface::init(ros::NodeHandle& root_nh, ros::No
       js_interface_.registerHandle(hardware_interface::JointStateHandle(
           joint_names_[j], &joint_position_[j], &joint_velocity_[j], &joint_effort_[j]));
 
-      // Create effort joint interface
-      joint_control_methods_[j] = EFFORT;
-      joint_handle = hardware_interface::JointHandle(js_interface_.getHandle(joint_names_[j]),
-                                                     &joint_effort_command_[j]);
-//      hardware_interface::RobotStateHandle(js_interface_.getHandle(joint_names_[j],
-//                                                                   &joint_effort_command_[j]));
-      robot_state_interface_.joint_effort_interfaces_.registerHandle(joint_handle);
-      ej_interface_.registerHandle(joint_handle);
+       if(hardware_interface == "EffortJointInterface" || hardware_interface == "hardware_interface/EffortJointInterface")
+         {
+           // Create effort joint interface
+           joint_control_methods_[j] = EFFORT;
+           joint_handle = hardware_interface::JointHandle(js_interface_.getHandle(joint_names_[j]),
+                                                          &joint_effort_command_[j]);
+           //      hardware_interface::RobotStateHandle(js_interface_.getHandle(joint_names_[j],
+           //                                                                   &joint_effort_command_[j]));
+           robot_state_interface_.joint_effort_interfaces_.registerHandle(joint_handle);
+           ej_interface_.registerHandle(joint_handle);
+         }
+       else if(hardware_interface == "VelocityJointInterface" || hardware_interface == "hardware_interface/VelocityJointInterface")
+         {
+           // Create velocity joint interface
+           joint_control_methods_[j] = VELOCITY;
+           joint_handle = hardware_interface::JointHandle(js_interface_.getHandle(joint_names_[j]),
+                                                          &joint_velocity_command_[j]);
+           vj_interface_.registerHandle(joint_handle);
+         }
+       else if(hardware_interface == "PositionJointInterface" || hardware_interface == "hardware_interface/PositionJointInterface")
 
-      // Create position joint interface
-      joint_control_methods_[j] = POSITION;
-      joint_handle = hardware_interface::JointHandle(js_interface_.getHandle(joint_names_[j]),
-                                                     &joint_position_command_[j]);
-      pj_interface_.registerHandle(joint_handle);
-
-      // Create velocity joint interface
-      joint_control_methods_[j] = VELOCITY;
-      joint_handle = hardware_interface::JointHandle(js_interface_.getHandle(joint_names_[j]),
-                                                     &joint_velocity_command_[j]);
-      vj_interface_.registerHandle(joint_handle);
-
+         {
+           // Create position joint interface
+           joint_control_methods_[j] = POSITION;
+           joint_handle = hardware_interface::JointHandle(js_interface_.getHandle(joint_names_[j]),
+                                                          &joint_position_command_[j]);
+           pj_interface_.registerHandle(joint_handle);
+         }
+       else
+       {
+         ROS_FATAL_STREAM_NAMED("ros_ethercat_hardware_interface","No matching hardware interface found for '"
+           << hardware_interface << "' while loading interfaces for " << joint_names_[j] );
+         return false;
+       }
+       const ros::NodeHandle joint_limit_nh(root_nh);
+       registerJointLimits(joint_names_[j], joint_handle, joint_control_methods_[j],
+                           joint_limit_nh, urdf_model_ptr,
+                           &joint_types_[j], &joint_lower_limits_[j], &joint_upper_limits_[j],
+                           &joint_effort_limits_[j]);
     }
-
 
 
 
@@ -260,7 +345,8 @@ bool RobotStateEtherCATHardwareInterface::DeInitSlaves(SlaveType slave_type)
   switch (slave_type) {
     case SlaveType::ANYDRIVE:
       {
-        for(int i=0;i<n_dof_;i++)
+        int disable_count = 0;
+        for(int i=0;i<ec_slavecount;i++)
           {
             switch ((feedbacks_[i]->state<<28)>>28) {
               case ANYDriveFSMState::CONFIGURE:
@@ -268,6 +354,7 @@ bool RobotStateEtherCATHardwareInterface::DeInitSlaves(SlaveType slave_type)
                 break;
               case ANYDriveFSMState::STANDBY:
                 commands_[i]->control_word = 0;
+                disable_count++;
                 break;
               case ANYDriveFSMState::MOTOR_OP:
                 commands_[i]->control_word = ANYDriveControlWord::MOTOR_OP_TO_STANDBY;
@@ -275,10 +362,10 @@ bool RobotStateEtherCATHardwareInterface::DeInitSlaves(SlaveType slave_type)
               case ANYDriveFSMState::CONTROL_OP:
                 commands_[i]->control_word = ANYDriveControlWord::CONTROL_OP_TO_STANDBY;
                 commands_[i]->mode_of_operation = ANYDriveModeOfOperation::FREEZE;
-                if(i==n_dof_-1)
-                  return true;
                 break;
               }
+            if(disable_count == ec_slavecount)
+              return true;
             return false;
           }
         break;
@@ -296,9 +383,12 @@ bool RobotStateEtherCATHardwareInterface::InitSlaves(SlaveType slave_type)
   switch (slave_type) {
     case SlaveType::ANYDRIVE:
       {
-        for(int i=0;i<n_dof_;i++)
+        for(int i=0;i<ec_slavecount;i++)
           {
             switch ((feedbacks_[i]->state<<28)>>28) {
+              case ANYDriveFSMState::ERROR:
+                commands_[i]->control_word = ANYDriveControlWord::CLEAR_ERRORS_TO_STANDBY;
+                break;
               case ANYDriveFSMState::CONFIGURE:
                 commands_[i]->control_word = ANYDriveControlWord::CONFIGURE_TO_STANDBY;
                 break;
@@ -437,7 +527,7 @@ void RobotStateEtherCATHardwareInterface::EtherCATLoop()
   ROS_INFO("Starting EtherCAT update loop");
   if (ec_slave[0].state == EC_STATE_OPERATIONAL )
   {
-      ros::Rate rate(1000);
+      ros::Rate rate(500);
       while (ros::ok()) {
           ecx_send_processdata(&ecx_context);
           int wkc = ecx_receive_processdata(&ecx_context, EC_TIMEOUTRET);
@@ -513,10 +603,14 @@ void RobotStateEtherCATHardwareInterface::read(const ros::Time& time, const ros:
 void RobotStateEtherCATHardwareInterface::write(const ros::Time& time, const ros::Duration& period)
 {
 
+
   std::vector<ANYDriveRPDO> driver_commands;
   driver_commands.resize(n_dof_);
-
-
+  boost::recursive_mutex::scoped_lock lock(r_mutex_);
+  //! WSHY: keep the unwrite data same as initial
+  for(int i = 0;i<commands_.size();i++)
+    driver_commands[i] = *commands_[i];
+  lock.unlock();
 
   // If the E-stop is active, joints controlled by position commands will maintain their positions.
   if (e_stop_active_)
@@ -533,14 +627,23 @@ void RobotStateEtherCATHardwareInterface::write(const ros::Time& time, const ros
     last_e_stop_active_ = false;
   }
 
+  ej_sat_interface_.enforceLimits(period);
+  ej_limits_interface_.enforceLimits(period);
+  pj_sat_interface_.enforceLimits(period);
+  pj_limits_interface_.enforceLimits(period);
+  vj_sat_interface_.enforceLimits(period);
+  vj_limits_interface_.enforceLimits(period);
+
   for(unsigned int j=0; j < n_dof_; j++)
   {
+
     switch (joint_control_methods_[j])
     {
       case EFFORT:
         {
           const double effort = e_stop_active_ ? 0 : joint_effort_command_[j];
           exchage4bytes_.floatdata = effort;
+          ROS_INFO("recieved joint '%d' torque command%f\n", j, effort);
           driver_commands[j].desired_joint_torque = exchage4bytes_.int32data;
         break;
         }
@@ -548,6 +651,7 @@ void RobotStateEtherCATHardwareInterface::write(const ros::Time& time, const ros
         {
           exchage8bytes_.doubledata = joint_position_command_[j];
           driver_commands[j].desired_position = exchage8bytes_.int64data;
+//          ROS_INFO("recieved joint '%d' position command%f\n", j, joint_position_command_[j]);
           break;
         }
       case VELOCITY:
@@ -559,9 +663,14 @@ void RobotStateEtherCATHardwareInterface::write(const ros::Time& time, const ros
         }
       }
     }
-    boost::recursive_mutex::scoped_lock lock(r_mutex_);
+//    boost::recursive_mutex::scoped_lock lock(r_mutex_);
+    lock.lock();
     for(int i=0;i<commands_.size();i++)
-      *commands_[i] = driver_commands[i] ;
+      {
+        *commands_[i] = driver_commands[i];
+//        exchage8bytes_.int64data = commands_[i]->desired_position;
+//        ROS_INFO("write joint '%d' position command%f\n", i, exchage8bytes_.doubledata);
+      }
     lock.unlock();
 //    ROS_INFO("Finish Write from EtherCAT");
 

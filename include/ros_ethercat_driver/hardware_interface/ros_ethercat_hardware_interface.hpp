@@ -21,6 +21,9 @@
 
 #include "robot_state_interface.hpp"
 
+#include "transmission_interface/transmission_info.h"
+#include <transmission_interface/transmission_parser.h>
+
 // ROS
 #include <ros/ros.h>
 #include <angles/angles.h>
@@ -76,6 +79,7 @@ public:
   bool DeInitSlaves(SlaveType slave_type);
 
   void EtherCATTimerThread();
+  void shutdown();
 //  void readJoints();
 //  void writeJoints();
 //  void readStates();
@@ -166,6 +170,8 @@ protected:
   double pos_read[12], pos_write[12], vel_read[12], vel_write[12], eff_read[12],eff_write[12];
   double position[3], orinetation[4], linear_vel[3], angular_vel[3];
 //  free_gait_msgs::RobotState actual_robot_state_;
+
+  std::vector<transmission_interface::TransmissionInfo> transmissions_;
 
 private:
 

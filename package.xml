@@ -61,6 +61,7 @@
   <depend>controller_manager</depend>
   <depend>hardware_interface</depend>
   <depend>transmission_interface</depend>
+  <depend>urdf</depend>
 
 
   <!-- The export tag contains other, unspecified, tags -->

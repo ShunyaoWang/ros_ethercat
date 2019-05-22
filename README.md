@@ -11,6 +11,7 @@ A Ros EtherCAT hardware interface for ros_control based on **SOEM**
   > `catkin_make`
 
 ## Usage
+- Fisrt connect the EtherCAT Wire to the Ethernet port of your computer, then, **Disconnect** the wired connection
 - There is a hardware_interface for ros_control, which can be loaded in "[balance_controller]()", use roslaunch.
   ```
   sudo su

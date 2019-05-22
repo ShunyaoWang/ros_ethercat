@@ -17,6 +17,7 @@
 //#include "ethercat.h"
 //#include "ethercat.h"
 #include "soem/ethercat.h"
+#include "ros_ethercat_driver/slave_info/ANYDrive.hpp"
 
 #define EC_TIMEOUTMON 500
 
@@ -27,81 +28,6 @@ boolean needlf;
 volatile int wkc;
 boolean inOP;
 uint8 currentgroup = 0;
-
-enum ANYDriveFSMState{
-  COLD_START  = 1,
-  WARM_START  = 2,
-  CONFIGURE   = 3,
-  CALIBRATE   = 4,
-  STANDBY     = 5,
-  MOTOR_OP    = 6,
-  CONTROL_OP  = 7,
-  ERROR       = 8,
-  FATAL       = 9,
-  MOTOR_PRE_OP= 10,
-};
-
-enum ANYDriveModeOfOperation{
-  FREEZE                              = 1,
-  DISABLE                             = 2,
-  CURRENT                             = 3,
-  MOTOR_POSITION                      = 4,
-  MOTOR_VELOCITY                      = 5,
-  GEAR_POSITION                       = 6,
-  GEAR_VELOCITY                       = 7,
-  JOINT_POSITION                      = 8,
-  JOINT_VELOCITY                      = 9,
-  JOINT_TORQUE                        = 10,
-  JOINT_POSITION_VELOCITY             = 11,
-  JOINT_POSITION_VELOCITY_TORQUE      = 12,
-  JOINT_POSITION_VELOCITY_TORQUE_PID  = 13,
-
-};
-
-enum ANYDriveControlWord{
-  WARM_RESET                = 1,
-  CLEAR_ERRORS_TO_MOTOR_OP  = 2,
-  STANDBY_TO_CONFIGURE      = 3,
-  CONFIGURE_TO_STANDBY      = 4,
-  CALIBRATE_TO_CONFIGURE    = 5,
-  CONFIGURE_TO_CALIBRATE    = 6,
-  MOTOR_OP_TO_STANDBY       = 7,
-  STANDBY_TO_MOTOR_PRE_OP   = 8,
-  CONTROL_OP_TO_MOTOR_OP    = 9,
-  MOTOR_OP_TO_CONTROL_OP    = 10,
-  CONTROL_OP_TO_STANDBY     = 11,
-  CLEAR_ERRORS_TO_STANDBY   = 12,
-};
-
-//! WSHY: EtherCAT datagrams of ANYDrive of Type A, refer to the ANYDrive document Page 36
-struct ANYDriveRPDO{
-  uint16_t control_word;         // uint16    0x6040
-  uint16_t mode_of_operation;   // float C    0x6060
-  int32_t desired_motor_current;  // float A  0x2020
-  uint32_t desired_velocity; // float krpm    0x60FF
-  int32_t desired_joint_torque; // float NM   0x6071
-  int64_t desired_position; // double rad     0x607A
-  int32_t control_parameter_a;  // float      0x2024
-  int32_t control_parameter_b; // float       0x2025
-  int32_t control_parameter_c; //float        0x2026
-  int32_t control_parameter_d;   // float     0x2027
-};
-
-
-struct ANYDriveTPDO{
-  uint32_t state;         // uint32           0x6061 4bit FSM stste, 4bit MOP, 24bit,warnnings, errors, fatals
-  uint16_t temperature;   // float C          0x2002
-  uint16_t voltage;       // float V          0x2003
-  int64_t motor_position; // double rad       0x6064
-  int64_t gear_position;  // double rad       0x2005
-  int64_t joint_position; // double rad       0x2006
-  int32_t motor_current;  // float A          0x2007
-  int32_t motor_velocity; // float krpm       0x606C
-  int32_t gear_velocity;  // float rpm        0x2009
-  int32_t joint_velocity; // float rpm        0x200A
-  int32_t joint_acceleration; //float rpm/s   0x200B
-  int32_t joint_torque;   // float Nm         0x6077
-};
 
 /** Main slave data array.
  *  Each slave found on the network gets its own record.
@@ -163,7 +89,7 @@ ecx_contextt  ecx_context = {
     &ec_SM,             // .eepSM         =
     &ec_FMMU,           // .eepFMMU       =
     NULL,               // .FOEhook()
-    NULL                // .EOEhook()
+//    NULL                // .EOEhook()
 };
 
 typedef union {
@@ -219,7 +145,14 @@ void anydriveTest(char *ifname)
 
          for (int i=1; i<=ec_slavecount; i++) {
              printf("Slave %d has CA? %s\n", i, ec_slave[i].CoEdetails & ECT_COEDET_SDOCA ? "true":"false" );
-         }
+
+             int32 ob2;int os;
+             os=sizeof(ob2); ob2 = ANYDrivePDOTYPE::RPDO_A;// 0x16030001;
+             ecx_SDOwrite(&ecx_context, i, 0x1c12, 0, TRUE, os, &ob2, EC_TIMEOUTRXM);
+             os=sizeof(ob2); ob2 = ANYDrivePDOTYPE::TPDO_A;//0x1a030001;
+             ecx_SDOwrite(&ecx_context, i, 0x1c13, 0, TRUE, os, &ob2, EC_TIMEOUTRXM);
+           }
+
          //! WSHY: the ANYDrive is not support LRW(Logical READ&WRITE) but, it can't read
          //! by the upload slave info, so we manually assigned the value to Block LRW, before
          //! ec_config_map set it to ec_context.
@@ -290,7 +223,7 @@ void anydriveTest(char *ifname)
             printf("Operational state reached for all slaves.\n");
             inOP = TRUE;
                 /* cyclic loop */
-            for(i = 1; i <= 2000; i++)
+            for(i = 1; i <= 1000; i++)
             {
                ecx_send_processdata(&ecx_context);
                wkc = ecx_receive_processdata(&ecx_context, EC_TIMEOUTRET);
@@ -317,38 +250,38 @@ void anydriveTest(char *ifname)
 //                    printf(" %s motor temperature is %f°C\n", ec_slave[1].name, 0.01*feedback->temperature -55.0);//convert_uint32_to_float(feedback->motor_current));
 //                    printf(" %s motor current is %f°A\n", ec_slave[1].name, convert_int32_to_float(&feedback->motor_current));//convert_uint32_to_float(feedback->motor_current));
 //                    printf(" %s motor position is %f°rad\n", ec_slave[1].name, convert_int64_to_double(&feedback->motor_position));//convert_uint32_to_float(feedback->motor_current));
-                      printf(" %s joint velocity is %frpm\n", ec_slave[1].name, convert_int32_to_float(&feedback->joint_velocity));//convert_uint32_to_float(feedback->motor_current));
+//                      printf(" %s joint velocity is %frpm\n", ec_slave[1].name, convert_int32_to_float(&feedback->joint_velocity));//convert_uint32_to_float(feedback->motor_current));
 
                     if(i == 10)
                       {
-                        command->control_word = CONFIGURE_TO_STANDBY;
-                        printf("CONFIGURE_TO_STANDBY");
+                        command->control_word = ANYDriveControlWord::CONFIGURE_TO_STANDBY;
+//                        printf("CONFIGURE_TO_STANDBY");
                       }
-                    if((feedback->state<<28)>>28 == STANDBY){
-                        command->control_word = STANDBY_TO_MOTOR_PRE_OP;
-                        printf("STANDBY");
+                    if((feedback->state<<28)>>28 == ANYDriveFSMState::STANDBY){
+                        command->control_word = ANYDriveControlWord::STANDBY_TO_MOTOR_PRE_OP;
+//                        printf("STANDBY");
                       }
-                    if((feedback->state<<28)>>28 == MOTOR_OP){
-                        command->control_word = MOTOR_OP_TO_CONTROL_OP;
-                        printf("MOTOR_PRE_OP");
+                    if((feedback->state<<28)>>28 == ANYDriveFSMState::MOTOR_OP){
+                        command->control_word = ANYDriveControlWord::MOTOR_OP_TO_CONTROL_OP;
+//                        printf("MOTOR_PRE_OP");
                       }
-                    if((feedback->state<<28)>>28 == CONTROL_OP){
-                        command->mode_of_operation = JOINT_VELOCITY;
-                        printf("CONTROL_OP");
+                    if((feedback->state<<28)>>28 == ANYDriveFSMState::CONTROL_OP){
+                        command->mode_of_operation = ANYDriveModeOfOperation::JOINT_VELOCITY;
+//                        printf("CONTROL_OP");
                       }
-                    if((feedback->state<<24)>>28 == JOINT_VELOCITY){
+                    if((feedback->state<<24)>>28 == ANYDriveModeOfOperation::JOINT_VELOCITY){
                         Bytes4Exchage vel;
-                        vel.floatdata = 10.0;
+                        vel.floatdata = 0.0;
                         command->desired_velocity = vel.uint32data;//convert_float_to_int32(&vel);
                       }
-                    if(i == 1900){
+                    if(i == 900){
                         command->desired_velocity = 0.0;
                       }
-                    if(i == 1950){
-                        command->mode_of_operation = FREEZE;
+                    if(i == 950){
+                        command->mode_of_operation = ANYDriveModeOfOperation::FREEZE;
                       }
-                    if(i == 1960){
-                        command->control_word = CONTROL_OP_TO_STANDBY;
+                    if(i == 960){
+                        command->control_word = ANYDriveControlWord::CONTROL_OP_TO_STANDBY;
                       }
               }
 

@@ -16,6 +16,7 @@ find_package(catkin REQUIRED COMPONENTS
   controller_manager
   hardware_interface
   transmission_interface
+  urdf
 )
 
 ## System dependencies are found with CMake's conventions
@@ -132,9 +133,9 @@ include_directories(
    hardware_interface/ros_ethercat_hardware_interface.cpp
 #   test/anydrive_test.c
  )
-  add_library(anydrive_test
-    test/anydrive_test.c
-  )
+#  add_library(anydrive_test
+#    test/anydrive_test.c
+#  )
 #target_link_libraries(ros_ethercat_hardware_interface
 #  anydrive_test
 # )
@@ -153,7 +154,7 @@ include_directories(
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
 # add_executable(${PROJECT_NAME}_node src/ros_ethercat_driver_node.cpp)
-add_executable(anydrive_test_node test/anydrive_test.c)
+add_executable(anydrive_test_node test/anydrive_test.cpp)
 add_executable(hardware_interface_test test/hardware_interface_test.cpp)
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -172,7 +173,7 @@ target_link_libraries(anydrive_test_node
 target_link_libraries(hardware_interface_test
    ${catkin_LIBRARIES}
    ros_ethercat_hardware_interface
-   anydrive_test
+#   anydrive_test
  )
 
 #############

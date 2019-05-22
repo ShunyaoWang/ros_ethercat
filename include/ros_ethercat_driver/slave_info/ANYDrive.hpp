@@ -12,6 +12,8 @@
 #include <string.h>
 #include <inttypes.h>
 
+
+
 typedef enum ANYDriveFSMState{
   COLD_START  = 1,
   WARM_START  = 2,
@@ -56,6 +58,17 @@ typedef enum ANYDriveControlWord{
   CONTROL_OP_TO_STANDBY     = 11,
   CLEAR_ERRORS_TO_STANDBY   = 12,
 }ANYDriveControlWord;
+
+typedef enum ANYDrivePDOTYPE{
+  RPDO_A = 0x16000001,
+  TPDO_A = 0x1A000001,
+  RPDO_B = 0x16010001,
+  TPDO_B = 0x1A010001,
+  RPDO_C = 0x16020001,
+  TPDO_C = 0x1A020001,
+  RPDO_D = 0x16030001,
+  TPDO_D = 0x1A030001,
+}ANYDrivePDOTYPE;
 
 //! WSHY: EtherCAT datagrams of ANYDrive of Type A, refer to the ANYDrive document Page 36
 struct ANYDriveRPDO{
