@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 2.8.3)
-project(rqt_test_plugin)
+project(rqt_ethercat_test_plugin)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
  add_compile_options(-std=c++11)
@@ -19,37 +19,37 @@ find_package(catkin REQUIRED COMPONENTS
 find_package(Qt5Widgets REQUIRED)
 
 
-set(rqt_test_plugin_SRCS
-  src/rqt_test_plugin/rqt_test_plugin.cpp
-  src/rqt_test_plugin/rqt_test_plugin_widget.cpp
+set(rqt_ethercat_test_plugin_SRCS
+  src/rqt_ethercat_test_plugin/rqt_ethercat_test_plugin.cpp
+  src/rqt_ethercat_test_plugin/rqt_ethercat_test_plugin_widget.cpp
 )
 
-set(rqt_test_plugin_HDRS
-  include/rqt_test_plugin/rqt_test_plugin.h
-  include/rqt_test_plugin/rqt_test_plugin_widget.h
+set(rqt_ethercat_test_plugin_HDRS
+  include/rqt_ethercat_test_plugin/rqt_ethercat_test_plugin.h
+  include/rqt_ethercat_test_plugin/rqt_ethercat_test_plugin_widget.h
 )
 
-set(rqt_test_plugin_UIS
-  ui/rqt_test_plugin/rqt_test_plugin_widget.ui
+set(rqt_ethercat_test_plugin_UIS
+  ui/rqt_ethercat_test_plugin/rqt_ethercat_test_plugin_widget.ui
 )
 
-set(rqt_test_plugin_INCLUDE_DIRECTORIES
+set(rqt_ethercat_test_plugin_INCLUDE_DIRECTORIES
   include
   ${CMAKE_CURRENT_BINARY_DIR}
 )
 
 
 catkin_package(
-  INCLUDE_DIRS ${rqt_test_plugin_INCLUDE_DIRECTORIES}
+  INCLUDE_DIRS ${rqt_ethercat_test_plugin_INCLUDE_DIRECTORIES}
   LIBRARIES ${PROJECT_NAME}
   CATKIN_DEPENDS rqt_gui rqt_gui_cpp
 )
 
-qt5_wrap_cpp(rqt_test_plugin_MOCS ${rqt_test_plugin_HDRS})
-qt5_wrap_ui(rqt_test_plugin_UIS_H ${rqt_test_plugin_UIS})
+qt5_wrap_cpp(rqt_ethercat_test_plugin_MOCS ${rqt_ethercat_test_plugin_HDRS})
+qt5_wrap_ui(rqt_ethercat_test_plugin_UIS_H ${rqt_ethercat_test_plugin_UIS})
 
-include_directories(${rqt_test_plugin_INCLUDE_DIRECTORIES} ${catkin_INCLUDE_DIRS})
-add_library(${PROJECT_NAME} ${rqt_test_plugin_SRCS} ${rqt_test_plugin_MOCS} ${rqt_test_plugin_UIS_H})
+include_directories(${rqt_ethercat_test_plugin_INCLUDE_DIRECTORIES} ${catkin_INCLUDE_DIRS})
+add_library(${PROJECT_NAME} ${rqt_ethercat_test_plugin_SRCS} ${rqt_ethercat_test_plugin_MOCS} ${rqt_ethercat_test_plugin_UIS_H})
 target_link_libraries(${PROJECT_NAME} ${catkin_LIBRARIES})
 target_link_libraries(${PROJECT_NAME} Qt5::Widgets)
 find_package(class_loader)
@@ -58,7 +58,7 @@ class_loader_hide_library_symbols(${PROJECT_NAME})
 ## Uncomment this if the package has a setup.py. This macro ensures
 ## modules and global scripts declared therein get installed
 ## See http://ros.org/doc/api/catkin/html/user_guide/setup_dot_py.html
-# catkin_python_setup()
+ catkin_python_setup()
 
 ################################################
 ## Declare ROS messages, services and actions ##
@@ -142,7 +142,7 @@ class_loader_hide_library_symbols(${PROJECT_NAME})
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
   INCLUDE_DIRS include
-#  LIBRARIES rqt_test_plugin
+#  LIBRARIES rqt_ethercat_test_plugin
 #  CATKIN_DEPENDS rqt_gui
 #  DEPENDS system_lib
 )
@@ -160,7 +160,7 @@ include_directories(
 
 ## Declare a C++ library
 # add_library(${PROJECT_NAME}
-#   src/${PROJECT_NAME}/rqt_test_plugin.cpp
+#   src/${PROJECT_NAME}/rqt_ethercat_test_plugin.cpp
 # )
 
 ## Add cmake target dependencies of the library
@@ -171,7 +171,7 @@ include_directories(
 ## Declare a C++ executable
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
-# add_executable(${PROJECT_NAME}_node src/rqt_test_plugin_node.cpp)
+# add_executable(${PROJECT_NAME}_node src/rqt_ethercat_test_plugin_node.cpp)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -205,12 +205,12 @@ install(TARGETS ${PROJECT_NAME}
   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
 )
 
-install(PROGRAMS scripts/rqt_test_plugin
-  DESTINATION ${CATKIN_GLOBAL_BIN_DESTINATION}
-)
-install(PROGRAMS scripts/rqt_test_plugin
-  DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
-)
+#install(PROGRAMS scripts/rqt_ethercat_test_plugin
+#  DESTINATION ${CATKIN_GLOBAL_BIN_DESTINATION}
+#)
+#install(PROGRAMS scripts/rqt_ethercat_test_plugin
+#  DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+#)
 
 install(DIRECTORY include/${PROJECT_NAME}/
   DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
@@ -222,7 +222,7 @@ install(DIRECTORY include/${PROJECT_NAME}/
 #############
 
 ## Add gtest based cpp test target and link libraries
-# catkin_add_gtest(${PROJECT_NAME}-test test/test_rqt_test_plugin.cpp)
+# catkin_add_gtest(${PROJECT_NAME}-test test/test_rqt_ethercat_test_plugin.cpp)
 # if(TARGET ${PROJECT_NAME}-test)
 #   target_link_libraries(${PROJECT_NAME}-test ${PROJECT_NAME})
 # endif()

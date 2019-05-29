@@ -1,5 +1,5 @@
-#ifndef RQT_TEST_PLUGIN_WIDGET
-#define RQT_TEST_PLUGIN_WIDGET
+#ifndef rqt_ethercat_test_plugin_WIDGET
+#define rqt_ethercat_test_plugin_WIDGET
 
 #include <QWidget>
 #include <QCheckBox>
@@ -12,16 +12,16 @@
 #include "eigen3/Eigen/Eigen"
 
 namespace Ui {
-  class rqt_test_plugin_widget;
+  class rqt_ethercat_test_plugin_widget;
 }
 
-class rqt_test_plugin_widget : public QWidget
+class rqt_ethercat_test_plugin_widget : public QWidget
 {
   Q_OBJECT
 
 public:
-  explicit rqt_test_plugin_widget(QWidget *parent = nullptr);
-  ~rqt_test_plugin_widget();
+  explicit rqt_ethercat_test_plugin_widget(QWidget *parent = nullptr);
+  ~rqt_ethercat_test_plugin_widget();
 private slots:
 
   void on_Mode_activated(int index);
@@ -41,7 +41,7 @@ private slots:
   void on_stop_clicked();
 
 private:
-  Ui::rqt_test_plugin_widget *ui;
+  Ui::rqt_ethercat_test_plugin_widget *ui;
 
   std::vector<QCheckBox*> motor_chooser;
 

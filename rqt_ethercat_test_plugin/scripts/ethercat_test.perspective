@@ -1,0 +1,106 @@
+{
+  "keys": {},
+  "groups": {
+    "pluginmanager": {
+      "keys": {
+        "running-plugins": {
+          "type": "repr",
+          "repr": "{u'rqt_ethercat_test_plugin/EtherCATTestPlugin': [1]}"
+        }
+      },
+      "groups": {
+        "plugin__rqt_ethercat_test_plugin__EtherCATTestPlugin__1": {
+          "keys": {},
+          "groups": {
+            "dock_widget__rqt_ethercat_test_plugin_widget": {
+              "keys": {
+                "dockable": {
+                  "type": "repr",
+                  "repr": "True"
+                },
+                "parent": {
+                  "type": "repr",
+                  "repr": "None"
+                },
+                "dock_widget_title": {
+                  "type": "repr",
+                  "repr": "u'Form'"
+                }
+              },
+              "groups": {}
+            }
+          }
+        },
+        "plugin__test_plugin__1": {
+          "keys": {},
+          "groups": {
+            "dock_widget__rqt_test_plugin_widget": {
+              "keys": {
+                "dockable": {
+                  "type": "repr",
+                  "repr": "u'true'"
+                },
+                "parent": {
+                  "type": "repr",
+                  "repr": "None"
+                },
+                "dock_widget_title": {
+                  "type": "repr",
+                  "repr": "u'Form'"
+                }
+              },
+              "groups": {}
+            }
+          }
+        },
+        "plugin__rqt_anydrive_monitor__AnydriveMonitorPlugin__1": {
+          "keys": {},
+          "groups": {
+            "dock_widget__AnydriveMonitorPluginWidget": {
+              "keys": {
+                "dockable": {
+                  "type": "repr",
+                  "repr": "u'true'"
+                },
+                "parent": {
+                  "type": "repr",
+                  "repr": "None"
+                },
+                "dock_widget_title": {
+                  "type": "repr",
+                  "repr": "u'ANYdrive Monitor'"
+                }
+              },
+              "groups": {}
+            }
+          }
+        }
+      }
+    },
+    "mainwindow": {
+      "keys": {
+        "geometry": {
+          "type": "repr(QByteArray.hex)",
+          "repr(QByteArray.hex)": "QtCore.QByteArray('01d9d0cb0002000000000053000000bb0000040b0000029800000053000000d70000040b00000298000000010000000005a0')",
+          "pretty-print": "     S       S           "
+        },
+        "state": {
+          "type": "repr(QByteArray.hex)",
+          "repr(QByteArray.hex)": "QtCore.QByteArray('000000ff00000000fd0000000100000003000003b900000199fc0100000002fb00000096007200710074005f0061006e007900640072006900760065005f006d006f006e00690074006f0072005f005f0041006e007900640072006900760065004d006f006e00690074006f00720050006c007500670069006e005f005f0031005f005f0041006e007900640072006900760065004d006f006e00690074006f00720050006c007500670069006e0057006900640067006500740100000000000005a00000000000000000fb000000a0007200710074005f00650074006800650072006300610074005f0074006500730074005f0070006c007500670069006e005f005f0045007400680065007200430041005400540065007300740050006c007500670069006e005f005f0031005f005f007200710074005f00650074006800650072006300610074005f0074006500730074005f0070006c007500670069006e005f0077006900640067006500740100000000000003b90000029700ffffff000003b90000000000000004000000040000000800000008fc00000001000000030000000100000036004d0069006e0069006d0069007a006500640044006f0063006b00570069006400670065007400730054006f006f006c0062006100720000000000ffffffff0000000000000000')",
+          "pretty-print": "                  rqt_anydrive_monitor__AnydriveMonitorPlugin__1__AnydriveMonitorPluginWidget           rqt_ethercat_test_plugin__EtherCATTestPlugin__1__rqt_ethercat_test_plugin_widget                            6MinimizedDockWidgetsToolbar        "
+        }
+      },
+      "groups": {
+        "toolbar_areas": {
+          "keys": {
+            "MinimizedDockWidgetsToolbar": {
+              "type": "repr",
+              "repr": "8"
+            }
+          },
+          "groups": {}
+        }
+      }
+    }
+  }
+}

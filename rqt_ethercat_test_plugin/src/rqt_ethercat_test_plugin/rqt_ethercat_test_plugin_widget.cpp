@@ -1,12 +1,12 @@
-#include <rqt_test_plugin/rqt_test_plugin_widget.h>
-#include "ui_rqt_test_plugin_widget.h"
+#include <rqt_ethercat_test_plugin/rqt_ethercat_test_plugin_widget.h>
+#include "ui_rqt_ethercat_test_plugin_widget.h"
 #include "iostream"
 
 using namespace ros_ethercat_driver;
 
-rqt_test_plugin_widget::rqt_test_plugin_widget(QWidget *parent) :
+rqt_ethercat_test_plugin_widget::rqt_ethercat_test_plugin_widget(QWidget *parent) :
   QWidget(parent),
-  ui(new Ui::rqt_test_plugin_widget)
+  ui(new Ui::rqt_ethercat_test_plugin_widget)
 {
   ui->setupUi(this);
 //  ui->info_display->
@@ -16,12 +16,12 @@ rqt_test_plugin_widget::rqt_test_plugin_widget(QWidget *parent) :
   ui->desired_torque->setRange(-30, 30);
 }
 
-rqt_test_plugin_widget::~rqt_test_plugin_widget()
+rqt_ethercat_test_plugin_widget::~rqt_ethercat_test_plugin_widget()
 {
   delete ui;
 }
 
-void rqt_test_plugin_widget::updateFeedback()
+void rqt_ethercat_test_plugin_widget::updateFeedback()
 {
   ROS_INFO("In update Feeedback Loop");
   ros::Rate rate(50);
@@ -54,24 +54,24 @@ void rqt_test_plugin_widget::updateFeedback()
 
 }
 
-void rqt_test_plugin_widget::on_Mode_activated(int index)
+void rqt_ethercat_test_plugin_widget::on_Mode_activated(int index)
 {
   std::cout<<"Try to change mode index"<<index<<std::endl;
 }
 
-void rqt_test_plugin_widget::on_info_display_customContextMenuRequested(const QPoint &pos)
+void rqt_ethercat_test_plugin_widget::on_info_display_customContextMenuRequested(const QPoint &pos)
 {
 
 }
 
-void rqt_test_plugin_widget::on_Mode_activated(const QString &arg1)
+void rqt_ethercat_test_plugin_widget::on_Mode_activated(const QString &arg1)
 {
 
 //  std::cout<<"Try to change mode to"<<*arg1.data()<<std::endl;
 }
 
 
-void rqt_test_plugin_widget::on_connect_clicked()
+void rqt_ethercat_test_plugin_widget::on_connect_clicked()
 {
   QString PDOType = ui->pdo_type->currentText();
   ethercat_driver_ptr_->setPDOType("ANYdrive", PDOType.toStdString());
@@ -124,13 +124,13 @@ void rqt_test_plugin_widget::on_connect_clicked()
 
 //  ui->device_table->resize(1,3);
     is_connected = true;
-    updateFeedbackThread_ = boost::thread(boost::bind(&rqt_test_plugin_widget::updateFeedback, this));
+    updateFeedbackThread_ = boost::thread(boost::bind(&rqt_ethercat_test_plugin_widget::updateFeedback, this));
 //    updateFeedbackThread_.join();
 
 
 }
 
-void rqt_test_plugin_widget::displayOutputInfos(const std::string &color,
+void rqt_ethercat_test_plugin_widget::displayOutputInfos(const std::string &color,
                                                 const QString &context)
 {
 
@@ -153,7 +153,7 @@ void rqt_test_plugin_widget::displayOutputInfos(const std::string &color,
 //  ui->info_display->insertPlainText(context + QString("\n"));
 }
 
-void rqt_test_plugin_widget::on_disconnect_clicked()
+void rqt_ethercat_test_plugin_widget::on_disconnect_clicked()
 {
   is_connected = false;
   displayOutputInfos("green", "Try to disconnect ......");
@@ -166,7 +166,7 @@ void rqt_test_plugin_widget::on_disconnect_clicked()
   displayOutputInfos("green", "Disconnected Successfully");
 }
 
-void rqt_test_plugin_widget::on_set_mode_clicked()
+void rqt_ethercat_test_plugin_widget::on_set_mode_clicked()
 {
   QString cw = ui->control_word->currentText();
 
@@ -184,7 +184,7 @@ void rqt_test_plugin_widget::on_set_mode_clicked()
 
 }
 
-void rqt_test_plugin_widget::on_send_clicked()
+void rqt_ethercat_test_plugin_widget::on_send_clicked()
 {
   QString mode = ui->mode_of_operation->currentText();
   double command = 0;
@@ -208,7 +208,7 @@ void rqt_test_plugin_widget::on_send_clicked()
     }
 }
 
-void rqt_test_plugin_widget::on_stop_clicked()
+void rqt_ethercat_test_plugin_widget::on_stop_clicked()
 {
   for(int i = 0;i<motor_chooser.size();i++)
     {

@@ -26,6 +26,18 @@ A Ros EtherCAT hardware interface for ros_control based on **SOEM**
   source .bashrc
   rosrun ros_ethercat_driver anydrive_test eno1
   ```
+## rqt GUI for motor test
+- Fisrt make sure a **roscore** is running.
+- Then enter the su mode and run
+  ```
+  sudo su
+  source .bashrc
+  roslaunch rqt_ethercat_test_plugin ethercat_test.launch
+  ```
+- There is a GUI like this
+  ![ethercat_test_gui](/assets/ethercat_test_gui.png)
+  - Fisrt, input the Ethernet Port, for example 'eno1'.
+  - Then, click button 'connect', if success, there will be a list of device in the Table.
 
   ## TODO
-  Fixed EtherCAT update loop with accurate real_time in hardware_interface
+  Auto Switch between Golden Twitter and ANYdrive.

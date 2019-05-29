@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
- <class>rqt_test_plugin_widget</class>
- <widget class="QWidget" name="rqt_test_plugin_widget">
+ <class>rqt_ethercat_test_plugin_widget</class>
+ <widget class="QWidget" name="rqt_ethercat_test_plugin_widget">
   <property name="geometry">
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>671</width>
+    <width>743</width>
     <height>350</height>
    </rect>
   </property>

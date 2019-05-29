@@ -1,0 +1,14 @@
+<library path="lib/librqt_ethercat_test_plugin">
+  <class name="rqt_ethercat_test_plugin/EtherCATTestPlugin" type="rqt_ethercat_test_plugin::EtherCATTestPlugin" base_class_type="rqt_gui_cpp::Plugin">
+    <description>A Test rqt plugin</description>
+    <qtgui>
+      <group>
+        <label>Robot Tools</label>
+        <icon type="theme">folder</icon>
+        <statustip>Plugins related to...</statustip>
+      </group>
+      <label>EtherCAT Motor Test Plugin</label>
+      <statustip>A Test rqt plugin</statustip>
+    </qtgui>
+  </class>
+</library>
