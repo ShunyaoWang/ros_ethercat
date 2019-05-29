@@ -1,0 +1,306 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>rqt_test_plugin_widget</class>
+ <widget class="QWidget" name="rqt_test_plugin_widget">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>671</width>
+    <height>350</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Form</string>
+  </property>
+  <layout class="QGridLayout" name="gridLayout">
+   <item row="0" column="0" colspan="3">
+    <widget class="QLabel" name="label">
+     <property name="text">
+      <string>EtherCAT Motor Test</string>
+     </property>
+    </widget>
+   </item>
+   <item row="1" column="0" colspan="8">
+    <widget class="Line" name="line">
+     <property name="orientation">
+      <enum>Qt::Horizontal</enum>
+     </property>
+    </widget>
+   </item>
+   <item row="2" column="0" rowspan="7" colspan="5">
+    <widget class="QTableWidget" name="device_table">
+     <property name="showGrid">
+      <bool>true</bool>
+     </property>
+     <property name="rowCount">
+      <number>1</number>
+     </property>
+     <row/>
+     <column>
+      <property name="text">
+       <string>Address</string>
+      </property>
+     </column>
+     <column>
+      <property name="text">
+       <string>Device</string>
+      </property>
+     </column>
+     <column>
+      <property name="text">
+       <string>EtheCAT State</string>
+      </property>
+     </column>
+     <column>
+      <property name="text">
+       <string>Status</string>
+      </property>
+     </column>
+     <column>
+      <property name="text">
+       <string>Mode of operation</string>
+      </property>
+     </column>
+     <column>
+      <property name="text">
+       <string>Choose</string>
+      </property>
+     </column>
+    </widget>
+   </item>
+   <item row="3" column="6">
+    <widget class="QComboBox" name="control_word">
+     <item>
+      <property name="text">
+       <string>Warm Reset</string>
+      </property>
+     </item>
+     <item>
+      <property name="text">
+       <string>Configure to Standby</string>
+      </property>
+     </item>
+     <item>
+      <property name="text">
+       <string>Standby to MotorPreOp</string>
+      </property>
+     </item>
+     <item>
+      <property name="text">
+       <string>MotorOp to ControlOp</string>
+      </property>
+     </item>
+     <item>
+      <property name="text">
+       <string>ControlOp to MotorOp</string>
+      </property>
+     </item>
+     <item>
+      <property name="text">
+       <string>Standby to Configure</string>
+      </property>
+     </item>
+     <item>
+      <property name="text">
+       <string>MotorOp to Standby</string>
+      </property>
+     </item>
+     <item>
+      <property name="text">
+       <string>Clear Errors to MotorOp</string>
+      </property>
+     </item>
+     <item>
+      <property name="text">
+       <string>Clear Errors to Standby</string>
+      </property>
+     </item>
+    </widget>
+   </item>
+   <item row="3" column="7">
+    <widget class="QPushButton" name="set_mode">
+     <property name="whatsThis">
+      <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;br/&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">image: url(:/icons/16x16/done.svg);</string>
+     </property>
+     <property name="text">
+      <string>Set</string>
+     </property>
+    </widget>
+   </item>
+   <item row="4" column="5">
+    <widget class="QLabel" name="label_4">
+     <property name="text">
+      <string>Mode</string>
+     </property>
+    </widget>
+   </item>
+   <item row="4" column="6">
+    <widget class="QComboBox" name="mode_of_operation">
+     <item>
+      <property name="text">
+       <string>Position</string>
+      </property>
+     </item>
+     <item>
+      <property name="text">
+       <string>Velocity</string>
+      </property>
+     </item>
+     <item>
+      <property name="text">
+       <string>Torque</string>
+      </property>
+     </item>
+     <item>
+      <property name="text">
+       <string>Freeze</string>
+      </property>
+     </item>
+     <item>
+      <property name="text">
+       <string>Disable</string>
+      </property>
+     </item>
+    </widget>
+   </item>
+   <item row="5" column="6">
+    <widget class="QLabel" name="label_2">
+     <property name="text">
+      <string>Actual</string>
+     </property>
+    </widget>
+   </item>
+   <item row="5" column="7">
+    <widget class="QLabel" name="label_3">
+     <property name="text">
+      <string>Command</string>
+     </property>
+    </widget>
+   </item>
+   <item row="6" column="5">
+    <widget class="QLabel" name="label_5">
+     <property name="text">
+      <string>Position</string>
+     </property>
+    </widget>
+   </item>
+   <item row="6" column="7">
+    <widget class="QDoubleSpinBox" name="desired_position"/>
+   </item>
+   <item row="7" column="5">
+    <widget class="QLabel" name="label_6">
+     <property name="text">
+      <string>Velocity</string>
+     </property>
+    </widget>
+   </item>
+   <item row="7" column="7">
+    <widget class="QDoubleSpinBox" name="desired_velocity"/>
+   </item>
+   <item row="8" column="5">
+    <widget class="QLabel" name="label_7">
+     <property name="text">
+      <string>Torque</string>
+     </property>
+    </widget>
+   </item>
+   <item row="8" column="7">
+    <widget class="QDoubleSpinBox" name="desired_torque"/>
+   </item>
+   <item row="9" column="0">
+    <widget class="QComboBox" name="ethernet_port">
+     <item>
+      <property name="text">
+       <string>eth0</string>
+      </property>
+     </item>
+    </widget>
+   </item>
+   <item row="9" column="1">
+    <widget class="QLineEdit" name="ethernet_port_input"/>
+   </item>
+   <item row="9" column="2">
+    <widget class="QComboBox" name="pdo_type">
+     <item>
+      <property name="text">
+       <string>PDOA</string>
+      </property>
+     </item>
+     <item>
+      <property name="text">
+       <string>PDOB</string>
+      </property>
+     </item>
+     <item>
+      <property name="text">
+       <string>PDOC</string>
+      </property>
+     </item>
+     <item>
+      <property name="text">
+       <string>PDOD</string>
+      </property>
+     </item>
+    </widget>
+   </item>
+   <item row="9" column="3">
+    <widget class="QPushButton" name="connect">
+     <property name="text">
+      <string>Connect</string>
+     </property>
+    </widget>
+   </item>
+   <item row="9" column="4">
+    <widget class="QPushButton" name="disconnect">
+     <property name="text">
+      <string>Disconnect</string>
+     </property>
+    </widget>
+   </item>
+   <item row="9" column="6">
+    <widget class="QPushButton" name="send">
+     <property name="text">
+      <string>Send</string>
+     </property>
+    </widget>
+   </item>
+   <item row="9" column="7">
+    <widget class="QPushButton" name="stop">
+     <property name="text">
+      <string>Stop</string>
+     </property>
+    </widget>
+   </item>
+   <item row="10" column="0" colspan="8">
+    <widget class="QTextBrowser" name="info_display"/>
+   </item>
+   <item row="6" column="6">
+    <widget class="QLabel" name="actual_position">
+     <property name="text">
+      <string>0.0</string>
+     </property>
+    </widget>
+   </item>
+   <item row="7" column="6">
+    <widget class="QLabel" name="actual_velocity">
+     <property name="text">
+      <string>0.0</string>
+     </property>
+    </widget>
+   </item>
+   <item row="8" column="6">
+    <widget class="QLabel" name="actual_torque">
+     <property name="text">
+      <string>0.0</string>
+     </property>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

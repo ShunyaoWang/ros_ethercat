@@ -1,5 +1,5 @@
 # ros_ethercat_driver
-<img src = /assets/EtherCAT-16-9.jpg width = 30% height = 10% align = center />
+<img src = /assets/EtherCAT-16-9.jpg width = 30% height = 30% align = center />
 
 A Ros EtherCAT hardware interface for ros_control based on **SOEM**
 
