@@ -90,16 +90,24 @@ namespace ros_ethercat_driver
 
 RobotStateEtherCATHardwareInterface::RobotStateEtherCATHardwareInterface()
 {
-  TPDOType_ = ANYDrivePDOTYPE::TPDO_A;
-  RPDOType_ = ANYDrivePDOTYPE::RPDO_A;
+  ANYdriveTPDOType_ = PDOTYPE::TPDO_A;
+  ANYdriveRPDOType_ = PDOTYPE::RPDO_A;
+  GoldenTwitterTPDOType_ = PDOTYPE::TPDO_F;
+  GoldenTwitterRPDOType_ = PDOTYPE::RPDO_F;
+  motor_slave_num_ = 0;
 }
 
 RobotStateEtherCATHardwareInterface::~RobotStateEtherCATHardwareInterface()
 {
   ros::Duration delay(0.1);
-  while (!DeInitSlaves(SlaveType::ANYDRIVE)) {
+  double start = ros::Time::now().toSec();
+  while (!DeInitSlaves(slaves_type_)) {
 
       delay.sleep();
+      double wait_time = ros::Time::now().toSec() - start;
+      if(wait_time > 5.0)
+        break;
+
     }
   ec_slave[0].state = EC_STATE_INIT;
   /* request INIT state for all slaves */
@@ -111,9 +119,13 @@ RobotStateEtherCATHardwareInterface::~RobotStateEtherCATHardwareInterface()
 void RobotStateEtherCATHardwareInterface::shutdown()
 {
   ros::Duration delay(0.1);
-  while (!DeInitSlaves(SlaveType::ANYDRIVE)) {
+  double start = ros::Time::now().toSec();
+  while (!DeInitSlaves(slaves_type_)) {
 
       delay.sleep();
+      double wait_time = ros::Time::now().toSec() - start;
+      if(wait_time > 5.0)
+        break;
     }
   ec_slave[0].state = EC_STATE_INIT;
   /* request INIT state for all slaves */
@@ -165,6 +177,24 @@ bool RobotStateEtherCATHardwareInterface::init(ros::NodeHandle& root_nh, ros::No
       return false;
     }
   ifname = (char *)net_card.c_str();
+
+  std::string slave_type, pdo_type;
+  if(!root_nh.getParam("slave_type", slave_type))
+    {
+      ROS_ERROR("Can't decide the Slave Type");
+      return false;
+    }
+  if(!root_nh.getParam("pdo_type", pdo_type))
+    {
+      ROS_ERROR("Can't decide the PDO type");
+      return false;
+    }
+
+//  if(!root_nh.getParam("use_jc06_junction_slave", pdo_type))
+//    {
+//      ROS_ERROR("Can't decide the 'use_jc06_junction_slave'.");
+//      return false;
+//    }
 
   std::string urdf_string;
   if(!root_nh.getParam("/robot_description", urdf_string))
@@ -261,8 +291,8 @@ bool RobotStateEtherCATHardwareInterface::init(ros::NodeHandle& root_nh, ros::No
       js_interface_.registerHandle(hardware_interface::JointStateHandle(
           joint_names_[j], &joint_position_[j], &joint_velocity_[j], &joint_effort_[j]));
 
-       if(hardware_interface == "EffortJointInterface" || hardware_interface == "hardware_interface/EffortJointInterface")
-         {
+//       if(hardware_interface == "EffortJointInterface" || hardware_interface == "hardware_interface/EffortJointInterface")
+//         {
            // Create effort joint interface
            joint_control_methods_[j] = EFFORT;
            joint_handle = hardware_interface::JointHandle(js_interface_.getHandle(joint_names_[j]),
@@ -271,30 +301,31 @@ bool RobotStateEtherCATHardwareInterface::init(ros::NodeHandle& root_nh, ros::No
            //                                                                   &joint_effort_command_[j]));
            robot_state_interface_.joint_effort_interfaces_.registerHandle(joint_handle);
            ej_interface_.registerHandle(joint_handle);
-         }
-       else if(hardware_interface == "VelocityJointInterface" || hardware_interface == "hardware_interface/VelocityJointInterface")
-         {
+//         }
+//       else if(hardware_interface == "VelocityJointInterface" || hardware_interface == "hardware_interface/VelocityJointInterface")
+//         {
            // Create velocity joint interface
            joint_control_methods_[j] = VELOCITY;
            joint_handle = hardware_interface::JointHandle(js_interface_.getHandle(joint_names_[j]),
                                                           &joint_velocity_command_[j]);
            vj_interface_.registerHandle(joint_handle);
-         }
-       else if(hardware_interface == "PositionJointInterface" || hardware_interface == "hardware_interface/PositionJointInterface")
+//         }
+//       else if(hardware_interface == "PositionJointInterface" || hardware_interface == "hardware_interface/PositionJointInterface")
 
-         {
+//         {
            // Create position joint interface
            joint_control_methods_[j] = POSITION;
            joint_handle = hardware_interface::JointHandle(js_interface_.getHandle(joint_names_[j]),
                                                           &joint_position_command_[j]);
            pj_interface_.registerHandle(joint_handle);
-         }
-       else
-       {
-         ROS_FATAL_STREAM_NAMED("ros_ethercat_hardware_interface","No matching hardware interface found for '"
-           << hardware_interface << "' while loading interfaces for " << joint_names_[j] );
-         return false;
-       }
+//         }
+//       else
+//       {
+//         ROS_FATAL_STREAM_NAMED("ros_ethercat_hardware_interface","No matching hardware interface found for '"
+//           << hardware_interface << "' while loading interfaces for " << joint_names_[j] );
+//         return false;
+//       }
+           joint_control_methods_[j] = FREEZE;
        const ros::NodeHandle joint_limit_nh(root_nh);
        registerJointLimits(joint_names_[j], joint_handle, joint_control_methods_[j],
                            joint_limit_nh, urdf_model_ptr,
@@ -317,7 +348,8 @@ bool RobotStateEtherCATHardwareInterface::init(ros::NodeHandle& root_nh, ros::No
   e_stop_active_ = false;
   last_e_stop_active_ = false;
 
-  setPDOType("ANYdrive", "PDOA");
+
+  setPDOType(slave_type, pdo_type);
 
   feedbacks_.resize(n_dof_);
   commands_.resize(n_dof_);
@@ -326,6 +358,8 @@ bool RobotStateEtherCATHardwareInterface::init(ros::NodeHandle& root_nh, ros::No
      ROS_ERROR("Failed to initialize EtherCAT Conmunication !!!!!!!!!");
      return false;
   }
+
+  createEtherCATCheckThread();
   //! WSHY: EtherCAT LWR/LDR Loop, update struct data for slave, then the read&write set
   //! the data in struct to robot_state_handle
 //  EtherCATLoopThread_ = boost::thread(boost::bind(&RobotStateEtherCATHardwareInterface::EtherCATLoop, this));
@@ -338,7 +372,7 @@ bool RobotStateEtherCATHardwareInterface::init(ros::NodeHandle& root_nh, ros::No
   EtherCATTimer_.start();
 
   ros::Duration delay(0.1);
-  while (!InitSlaves(SlaveType::ANYDRIVE)) {
+  while (!InitSlaves(slaves_type_)) {
 
       delay.sleep();
     }
@@ -346,91 +380,160 @@ bool RobotStateEtherCATHardwareInterface::init(ros::NodeHandle& root_nh, ros::No
   return true;
 }
 
-bool RobotStateEtherCATHardwareInterface::DeInitSlaves(SlaveType slave_type)
+bool RobotStateEtherCATHardwareInterface::DeInitSlaves(const std::vector<SlaveType>& slave_type)
 {
-  switch (slave_type) {
-    case SlaveType::ANYDRIVE:
-      {
-        int disable_count = 0;
-        switch (TPDOType_) {
-          case ANYDrivePDOTYPE::TPDO_A:
-            {
-              ANYDriveRPDOA* driver_command;
-              ANYDriveTPDOA* driver_feedback;
-              for(int i=0;i<ec_slavecount;i++)
-                {
-                  ROS_INFO("disconnect %d slave",i);
-                  driver_feedback = (struct ANYDriveTPDOA*)ec_slave[i+1].inputs;
-                  driver_command = (struct ANYDriveRPDOA*)ec_slave[i+1].outputs;
-                  switch ((driver_feedback->state<<28)>>28) {
-                    case ANYDriveFSMState::CONFIGURE:
-                      driver_command->control_word = ANYDriveControlWord::CONFIGURE_TO_STANDBY;
-                      break;
-                    case ANYDriveFSMState::STANDBY:
-                      driver_command->control_word = 0;
-                      disable_count++;
-                      std::cout<<"disable_count : "<<disable_count<<std::endl;
-                      break;
-                    case ANYDriveFSMState::MOTOR_OP:
-                      driver_command->control_word = ANYDriveControlWord::MOTOR_OP_TO_STANDBY;
-                      break;
-                    case ANYDriveFSMState::CONTROL_OP:
-                      driver_command->control_word = ANYDriveControlWord::CONTROL_OP_TO_STANDBY;
-                      driver_command->mode_of_operation = ANYDriveModeOfOperation::FREEZE;
-                      break;
-                    }
-                  if(disable_count == ec_slavecount)
-                    return true;
-                  std::cout<<"slave count : "<<ec_slavecount<<std::endl;
+ bool success = false;
+ int disable_count = 0;
+// ROS_INFO("disconnect %d slave",slaves_type_.size());
+ for(int i=0;i<ec_slavecount;i++)
+   {
+     ROS_INFO("disconnect %d slave",i);
+    switch (slave_type[i]) {
+      case SlaveType::ANYDRIVE:
+        {
 
-              }
-            return false;
-            }
-          default:
-            {
-              ANYDriveRPDOA* driver_command;
-              ANYDriveTPDOA* driver_feedback;
-              for(int i=0;i<ec_slavecount;i++)
-                {
-                  driver_feedback = (struct ANYDriveTPDOA*)ec_slave[i+1].inputs;
-                  driver_command = (struct ANYDriveRPDOA*)ec_slave[i+1].outputs;
-                  switch ((driver_feedback->state<<28)>>28) {
-                    case ANYDriveFSMState::CONFIGURE:
-                      driver_command->control_word = ANYDriveControlWord::CONFIGURE_TO_STANDBY;
-                      break;
-                    case ANYDriveFSMState::STANDBY:
-                      driver_command->control_word = 0;
-                      disable_count++;
-                      break;
-                    case ANYDriveFSMState::MOTOR_OP:
-                      driver_command->control_word = ANYDriveControlWord::MOTOR_OP_TO_STANDBY;
-                      break;
-                    case ANYDriveFSMState::CONTROL_OP:
-                      driver_command->control_word = ANYDriveControlWord::CONTROL_OP_TO_STANDBY;
-                      driver_command->mode_of_operation = ANYDriveModeOfOperation::FREEZE;
-                      break;
-                    }
-                  if(disable_count == ec_slavecount)
-                    return true;
+          switch (ANYdriveTPDOType_) {
+            case PDOTYPE::TPDO_A:
+              {
+                ANYDriveRPDOA* driver_command;
+                ANYDriveTPDOA* driver_feedback;
+  //              for(int i=0;i<ec_slavecount;i++)
+  //                {
+                ROS_INFO("disconnect %d slave",i);
+                driver_feedback = (struct ANYDriveTPDOA*)ec_slave[i+1].inputs;
+                driver_command = (struct ANYDriveRPDOA*)ec_slave[i+1].outputs;
+                switch ((driver_feedback->state<<28)>>28) {
+                  case ANYDriveFSMState::CONFIGURE:
+                    driver_command->control_word = ANYDriveControlWord::CONFIGURE_TO_STANDBY;
+                    break;
+                  case ANYDriveFSMState::STANDBY:
+                    driver_command->control_word = 0;
+                    disable_count++;
+                    std::cout<<"disable_count : "<<disable_count<<std::endl;
+                    break;
+                  case ANYDriveFSMState::MOTOR_OP:
+                    driver_command->control_word = ANYDriveControlWord::MOTOR_OP_TO_STANDBY;
+                    break;
+                  case ANYDriveFSMState::CONTROL_OP:
+                    driver_command->control_word = ANYDriveControlWord::CONTROL_OP_TO_STANDBY;
+                    driver_command->mode_of_operation = ANYDriveModeOfOperation::FREEZE;
+                    break;
+                  }
+                if(disable_count == motor_slave_num_)
+                  {
+                    success = true;
+                    break;
+                  }
+                std::cout<<"motor slave count : "<<motor_slave_num_<<std::endl;
 
+  //              }
+                 success = false;
+                 break;
               }
-            return false;
+            default:
+              {
+                ANYDriveRPDOA* driver_command;
+                ANYDriveTPDOA* driver_feedback;
+  //              for(int i=0;i<ec_slavecount;i++)
+  //                {
+                    driver_feedback = (struct ANYDriveTPDOA*)ec_slave[i+1].inputs;
+                    driver_command = (struct ANYDriveRPDOA*)ec_slave[i+1].outputs;
+                    switch ((driver_feedback->state<<28)>>28) {
+                      case ANYDriveFSMState::CONFIGURE:
+                        driver_command->control_word = ANYDriveControlWord::CONFIGURE_TO_STANDBY;
+                        break;
+                      case ANYDriveFSMState::STANDBY:
+                        driver_command->control_word = 0;
+                        disable_count++;
+                        break;
+                      case ANYDriveFSMState::MOTOR_OP:
+                        driver_command->control_word = ANYDriveControlWord::MOTOR_OP_TO_STANDBY;
+                        break;
+                      case ANYDriveFSMState::CONTROL_OP:
+                        driver_command->control_word = ANYDriveControlWord::CONTROL_OP_TO_STANDBY;
+                        driver_command->mode_of_operation = ANYDriveModeOfOperation::FREEZE;
+                        break;
+                      }
+                    if(disable_count == motor_slave_num_)
+                      {
+                        success = true;
+                        break;
+                      }
+
+  //              }
+              success = false;
+           break;
+              }
             }
-          }
-        break;
+          break;
+        }
+      case SlaveType::GOLDENTWITTER:
+        {
+          switch (GoldenTwitterTPDOType_) {
+            case PDOTYPE::TPDO_F:
+              {
+                GoldenTwitterRPDOF* driver_command;
+                GoldenTwitterTPDOF* driver_feedback;
+  //              for(int i=0;i<ec_slavecount;i++)
+  //                {
+                ROS_INFO("disconnect %d slave",i);
+                driver_feedback = (struct GoldenTwitterTPDOF*)ec_slave[i+1].inputs;
+                driver_command = (struct GoldenTwitterRPDOF*)ec_slave[i+1].outputs;
+                switch ((driver_feedback->status_word & 0b01101111)) {
+                  case GoldenTwitterState::NOT_READY_TO_SWITCH_ON:
+                    driver_command->control_word = GoldenTwitterControlWord::SHUT_DOWN;
+                    break;
+                  case GoldenTwitterState::SWITCH_ON_DISABLED:
+                    driver_command->control_word = GoldenTwitterControlWord::SHUT_DOWN;
+                    break;
+                  case GoldenTwitterState::READY_TO_SWITCH_ON:
+                    driver_command->control_word = 0;
+                    disable_count++;
+                    std::cout<<"disable_count : "<<disable_count<<std::endl;
+                    break;
+                  case GoldenTwitterState::SWITCHED_ON:
+                    driver_command->control_word = GoldenTwitterControlWord::SHUT_DOWN;
+                    break;
+                  case GoldenTwitterState::QUICK_STOP_ACTIVED:
+                    driver_command->control_word = GoldenTwitterControlWord::DISABLE_VOLTAGE;
+                    break;
+//                  case GoldenTwitterState::FAULT:
+//                    driver_command->control_word = GoldenTwitterControlWord::FAULT_RESET;
+//                    break;
+                  case GoldenTwitterState::OP_ENABLED:
+                    driver_command->control_word = GoldenTwitterControlWord::SHUT_DOWN;
+                    break;
+                  }
+                if(disable_count == motor_slave_num_)
+                  {
+                    success = true;
+                    break;
+                  }
+                std::cout<<"motor slave count : "<<motor_slave_num_<<std::endl;
+
+  //              }
+                 success = false;
+                 break;
+              }
+            }
+          break;
+        }
+      case SlaveType::JUNCTION:
+        {
+          break;
+        }
       }
-    case SlaveType::ELMOGOLDEN:
-      {
-        break;
-      }
-    }
-  return true;
+  }
+ if(!success)
+   return false;
+ return true;
 }
 
 bool RobotStateEtherCATHardwareInterface::setSlaveCW(int id, const std::string& name,
                                                        const std::string& control_word)
 {
-  if(name == "ANYdrive")
+  SlaveType type = slaves_type_[id];
+  if(type == SlaveType::ANYDRIVE)
     {
       //! WSHY: for control word
       uint16_t cw = 0;
@@ -479,8 +582,8 @@ bool RobotStateEtherCATHardwareInterface::setSlaveCW(int id, const std::string& 
               ROS_INFO("%s", control_word.c_str());
           cw = ANYDriveControlWord::CLEAR_ERRORS_TO_STANDBY;
             }
-      switch (TPDOType_) {
-        case ANYDrivePDOTYPE::TPDO_A:
+      switch (ANYdriveRPDOType_) {
+        case PDOTYPE::RPDO_A:
           {
             ANYDriveRPDOA* driver_command;
             driver_command = (struct ANYDriveRPDOA*)ec_slave[id+1].outputs;
@@ -512,189 +615,577 @@ bool RobotStateEtherCATHardwareInterface::setSlaveCW(int id, const std::string& 
       return true;
 
     }
-  if(name == "Golden")
+  if(type == SlaveType::GOLDENTWITTER)
     {
-
+      //! WSHY: for control word
+      uint16_t cw = 0;
+      if(control_word == "Shut Down")
+        {
+          ROS_INFO("%s", control_word.c_str());
+          cw = GoldenTwitterControlWord::SHUT_DOWN;
+        }
+      else if (control_word == "Switch On") {
+          ROS_INFO("%s", control_word.c_str());
+          cw = GoldenTwitterControlWord::SWITCH_ON;
+        }
+      else if (control_word == "Switch On and Enable") {
+          ROS_INFO("%s", control_word.c_str());
+          cw = GoldenTwitterControlWord::SWITCH_ON_AND_ENABLE;
+        }
+      else if (control_word == "Quick Stop") {
+          ROS_INFO("%s", control_word.c_str());
+          cw = GoldenTwitterControlWord::QUICK_STOP;
+        }
+      else if (control_word == "Fault Reset") {
+          ROS_INFO("%s", control_word.c_str());
+          cw = GoldenTwitterControlWord::FAULT_RESET;
+        }
+      else if (control_word == "Disable Operation") {
+          ROS_INFO("%s", control_word.c_str());
+          cw = GoldenTwitterControlWord::DISABLE_OP;
+        }
+      else if (control_word == "Enable Operation") {
+          ROS_INFO("%s", control_word.c_str());
+          cw = GoldenTwitterControlWord::ENABLE_OP;
+        }
+      else if (control_word == "Disable Voltage") {
+          ROS_INFO("%s", control_word.c_str());
+          cw = GoldenTwitterControlWord::DISABLE_VOLTAGE;
+        }
+      switch (GoldenTwitterRPDOType_) {
+        case PDOTYPE::RPDO_F:
+          {
+            GoldenTwitterRPDOF* driver_command;
+            driver_command = (struct GoldenTwitterRPDOF*)ec_slave[id+1].outputs;
+            driver_command->control_word = cw;
+            break;
+          }
+        default:
+          {
+            GoldenTwitterRPDOF* driver_command;
+            driver_command = (struct GoldenTwitterRPDOF*)ec_slave[id+1].outputs;
+            driver_command->control_word = cw;
+            break;
+          }
+        }
+      return true;
     }
+  return false;
+
 }
 
 bool RobotStateEtherCATHardwareInterface::setCommand(int id, const std::string& mode_of_operation, double command)
 {
+  SlaveType type = slaves_type_[id];
 
-
-        switch (RPDOType_) {
-          case ANYDrivePDOTYPE::RPDO_A:
-            {
-              ANYDriveRPDOA* driver_command;
-              driver_command = (struct ANYDriveRPDOA*)ec_slave[id+1].outputs;
-              //! WSHY: for mode of operation
-              if(mode_of_operation == "Position")
-                {
-                  driver_command->mode_of_operation = ANYDriveModeOfOperation::JOINT_POSITION;
-                  exchage8bytes_.doubledata = command;
-                  driver_command->desired_position = exchage8bytes_.int64data;
-                }
-              else if(mode_of_operation == "Velocity")
-                {
-                  driver_command->mode_of_operation = ANYDriveModeOfOperation::JOINT_VELOCITY;
-                  exchage4bytes_.floatdata = (float)command;
-                  driver_command->desired_velocity = exchage4bytes_.int32data;
-                }
-              else if(mode_of_operation == "Torque")
-                {
-                  driver_command->mode_of_operation = ANYDriveModeOfOperation::JOINT_TORQUE;
-                  exchage4bytes_.floatdata = (float)command;
-                  driver_command->desired_joint_torque = exchage4bytes_.int32data;
-                }
-              else if(mode_of_operation == "Freeze")
-                driver_command->mode_of_operation = ANYDriveModeOfOperation::FREEZE;
-              else if(mode_of_operation == "Disable")
-                driver_command->mode_of_operation = ANYDriveModeOfOperation::DISABLE;
-              break;
-            }
-          default:
-            {
-              ANYDriveRPDOA* driver_command;
-              driver_command = (struct ANYDriveRPDOA*)ec_slave[id+1].outputs;
-              //! WSHY: for mode of operation
-              if(mode_of_operation == "Position")
-                {
-                  driver_command->mode_of_operation = ANYDriveModeOfOperation::JOINT_POSITION;
-                  exchage8bytes_.doubledata = command;
-                  driver_command->desired_position = exchage8bytes_.int64data;
-                }
-              else if(mode_of_operation == "Velocity")
-                {
-                  driver_command->mode_of_operation = ANYDriveModeOfOperation::JOINT_VELOCITY;
-                  exchage4bytes_.floatdata = (float)command;
-                  driver_command->desired_velocity = exchage4bytes_.int32data;
-                }
-              else if(mode_of_operation == "Torque")
-                {
-                  driver_command->mode_of_operation = ANYDriveModeOfOperation::JOINT_TORQUE;
-                  exchage4bytes_.floatdata = (float)command;
-                  driver_command->desired_joint_torque = exchage4bytes_.int32data;
-                }
-              else if(mode_of_operation == "Freeze")
-                driver_command->mode_of_operation = ANYDriveModeOfOperation::FREEZE;
-              else if(mode_of_operation == "Disable")
-                driver_command->mode_of_operation = ANYDriveModeOfOperation::DISABLE;
-            }
-
+  if(type == SlaveType::ANYDRIVE)
+    {
+      switch (ANYdriveRPDOType_) {
+        case PDOTYPE::RPDO_A:
+          {
+            ANYDriveRPDOA* driver_command;
+            driver_command = (struct ANYDriveRPDOA*)ec_slave[id+1].outputs;
+            //! WSHY: for mode of operation
+            if(mode_of_operation == "Position")
+              {
+                driver_command->mode_of_operation = ANYDriveModeOfOperation::JOINT_POSITION;
+                exchage8bytes_.doubledata = command;
+                driver_command->desired_position = exchage8bytes_.int64data;
+              }
+            else if(mode_of_operation == "Velocity")
+              {
+                driver_command->mode_of_operation = ANYDriveModeOfOperation::JOINT_VELOCITY;
+                exchage4bytes_.floatdata = (float)command;
+                driver_command->desired_velocity = exchage4bytes_.int32data;
+              }
+            else if(mode_of_operation == "Torque")
+              {
+                driver_command->mode_of_operation = ANYDriveModeOfOperation::JOINT_TORQUE;
+                exchage4bytes_.floatdata = (float)command;
+                driver_command->desired_joint_torque = exchage4bytes_.int32data;
+              }
+            else if(mode_of_operation == "Freeze")
+              driver_command->mode_of_operation = ANYDriveModeOfOperation::FREEZE;
+            else if(mode_of_operation == "Disable")
+              driver_command->mode_of_operation = ANYDriveModeOfOperation::DISABLE;
+            break;
           }
+        default:
+          {
+            ANYDriveRPDOA* driver_command;
+            driver_command = (struct ANYDriveRPDOA*)ec_slave[id+1].outputs;
+            //! WSHY: for mode of operation
+            if(mode_of_operation == "Position")
+              {
+                driver_command->mode_of_operation = ANYDriveModeOfOperation::JOINT_POSITION;
+                exchage8bytes_.doubledata = command;
+                driver_command->desired_position = exchage8bytes_.int64data;
+              }
+            else if(mode_of_operation == "Velocity")
+              {
+                driver_command->mode_of_operation = ANYDriveModeOfOperation::JOINT_VELOCITY;
+                exchage4bytes_.floatdata = (float)command;
+                driver_command->desired_velocity = exchage4bytes_.int32data;
+              }
+            else if(mode_of_operation == "Torque")
+              {
+                driver_command->mode_of_operation = ANYDriveModeOfOperation::JOINT_TORQUE;
+                exchage4bytes_.floatdata = (float)command;
+                driver_command->desired_joint_torque = exchage4bytes_.int32data;
+              }
+            else if(mode_of_operation == "Freeze")
+              driver_command->mode_of_operation = ANYDriveModeOfOperation::FREEZE;
+            else if(mode_of_operation == "Disable")
+              driver_command->mode_of_operation = ANYDriveModeOfOperation::DISABLE;
+          }
+
+        }
+    }
+  if(type == SlaveType::GOLDENTWITTER)
+    {
+      switch (GoldenTwitterRPDOType_) {
+        case PDOTYPE::RPDO_F:
+          {
+            GoldenTwitterRPDOF* driver_command;
+            driver_command = (struct GoldenTwitterRPDOF*)ec_slave[id+1].outputs;
+            //! WSHY: for mode of operation
+            if(mode_of_operation == "Position")
+              {
+                GoldenTwitterTPDOF* driver_feedback;
+                driver_feedback = (struct GoldenTwitterTPDOF*)ec_slave[id +1].inputs;
+                if(driver_feedback->status_word >> 12 == 1)
+                  {
+                    ROS_INFO("set point is not available");
+                    driver_command->control_word = 47;
+                  }else if (driver_feedback->status_word >>12 == 0) {
+                    ROS_INFO("set point is available");
+                    driver_command->control_word = 63;
+                  }
+//                if(driver_feedback->status_word >> 10 == 1)
+//                  {
+//                    ROS_INFO("Target is reached");
+//                    driver_command->control_word = 47;
+//                  }else if (driver_feedback->status_word >> 10 == 0) {
+//                    ROS_INFO("Target is  not reached");
+//                    driver_command->control_word = 63;
+//                  }
+                driver_command->mode_of_operation = GoldenTwitterModeOfOperation::PROFILE_POSITION;
+
+                int32 command_cnts = int32(TWITTER_GEAR_RATIO * TWITTER_ENCODER_RES * command/(2 * M_PI));
+                ROS_INFO("send position in motor cnts is : %d",command_cnts);
+                driver_command->max_torque = 50000;
+//                if(driver_command->target_position == command_cnts)
+//                  {
+//                    driver_command->control_word = 47;
+//                  }else {
+//                    driver_command->control_word = 63;
+//                  }
+                driver_command->target_position = command_cnts;//exchage8bytes_.int64data;
+
+              }
+            else if(mode_of_operation == "Velocity")
+              {
+                driver_command->mode_of_operation = GoldenTwitterModeOfOperation::SYNC_VELOCITY;
+                exchage4bytes_.floatdata = (float)command;
+                int32 vel_cnts = TWITTER_GEAR_RATIO * TWITTER_ENCODER_RES * command * 2 * M_PI/60;
+                driver_command->max_torque = 50000;
+                driver_command->target_velocity = vel_cnts;//exchage4bytes_.int32data;
+                ROS_INFO("send velocity in motor cnts is : %d",vel_cnts);
+              }
+            else if(mode_of_operation == "Torque")
+              {
+                driver_command->mode_of_operation = GoldenTwitterModeOfOperation::SYNC_TORQUE;
+                exchage4bytes_.floatdata = (float)command;
+                int16 motor_torque = int16(200*command/TWITTER_GEAR_RATIO);
+                driver_command->target_torque = motor_torque;//exchage4bytes_.int32data;
+                driver_command->max_torque = 50000;
+                ROS_INFO("send torque in motor : %d", motor_torque);
+              }
+//            else if(mode_of_operation == "Freeze")
+//              driver_command->mode_of_operation = ANYDriveModeOfOperation::FREEZE;
+//            else if(mode_of_operation == "Disable")
+//              driver_command->mode_of_operation = ANYDriveModeOfOperation::DISABLE;
+            break;
+          }
+        default:
+          {
+            GoldenTwitterRPDOF* driver_command;
+            driver_command = (struct GoldenTwitterRPDOF*)ec_slave[id+1].outputs;
+            //! WSHY: for mode of operation
+            if(mode_of_operation == "Position")
+              {
+                driver_command->mode_of_operation = GoldenTwitterModeOfOperation::PROFILE_POSITION;
+                exchage8bytes_.doubledata = command;
+                driver_command->target_position = exchage8bytes_.int64data;
+              }
+            else if(mode_of_operation == "Velocity")
+              {
+                driver_command->mode_of_operation = GoldenTwitterModeOfOperation::SYNC_VELOCITY;
+                exchage4bytes_.floatdata = (float)command;
+                driver_command->target_velocity = exchage4bytes_.int32data;
+              }
+            else if(mode_of_operation == "Torque")
+              {
+                driver_command->mode_of_operation = GoldenTwitterModeOfOperation::SYNC_TORQUE;
+                exchage4bytes_.floatdata = (float)command;
+                driver_command->target_torque = exchage4bytes_.int32data;
+              }
+            break;
+          }
+
+        }
+    }
         return true;
 }
 
-bool RobotStateEtherCATHardwareInterface::InitSlaves(SlaveType slave_type)
+bool RobotStateEtherCATHardwareInterface::setModeOfOperation(int id, const std::string& mode_of_operation)
 {
-  switch (slave_type) {
-    case SlaveType::ANYDRIVE:
-      {
-        switch (TPDOType_) {
-          case ANYDrivePDOTYPE::TPDO_A:
-            {
-              ANYDriveRPDOA* driver_command;
-              ANYDriveTPDOA* driver_feedback;
-              for(int i=0;i<ec_slavecount;i++)
-                {
-                  driver_feedback = (struct ANYDriveTPDOA*)ec_slave[i+1].inputs;
-                  driver_command = (struct ANYDriveRPDOA*)ec_slave[i+1].outputs;
-                  switch ((driver_feedback->state<<28)>>28) {
-                    case ANYDriveFSMState::ERROR:
-                      driver_command->control_word = ANYDriveControlWord::CLEAR_ERRORS_TO_STANDBY;
-                      break;
-                    case ANYDriveFSMState::CONFIGURE:
-                      driver_command->control_word = ANYDriveControlWord::CONFIGURE_TO_STANDBY;
-                      break;
-                    case ANYDriveFSMState::STANDBY:
-                      driver_command->control_word = ANYDriveControlWord::STANDBY_TO_MOTOR_PRE_OP;
-                      break;
-                    case ANYDriveFSMState::MOTOR_OP:
-                      driver_command->control_word = ANYDriveControlWord::MOTOR_OP_TO_CONTROL_OP;
-                      break;
-                    case ANYDriveFSMState::CONTROL_OP:
-                      ROS_INFO("Switch to Control_OP");
-                      driver_command->control_word = 0;
-                      switch (joint_control_methods_[i]) {
-                        case EFFORT:
-                          driver_command->mode_of_operation = ANYDriveModeOfOperation::JOINT_TORQUE;
-                          ROS_INFO("Switch to Joint Torque Mode");
-                          break;
-                        case VELOCITY:
-                          driver_command->mode_of_operation = ANYDriveModeOfOperation::JOINT_VELOCITY;
-                          ROS_INFO("Switch to Joint Velocity Mode");
-                          break;
-                        case POSITION:
-                          driver_command->mode_of_operation = ANYDriveModeOfOperation::JOINT_POSITION;
-                          ROS_INFO("Switch to Joint Position Mode ");
-                          break;
-
-                        }
-                      ROS_INFO("Switch to Control_OP");
-                      if(i==ec_slavecount-1)
-                        return true;
-                    }
-
-                }
-              return false;
-            }
-          default:
-            {
-              ANYDriveRPDOA* driver_command;
-              ANYDriveTPDOA* driver_feedback;
-              for(int i=0;i<ec_slavecount;i++)
-                {
-                  driver_feedback = (struct ANYDriveTPDOA*)ec_slave[i+1].inputs;
-                  driver_command = (struct ANYDriveRPDOA*)ec_slave[i+1].outputs;
-                  switch ((driver_feedback->state<<28)>>28) {
-                    case ANYDriveFSMState::ERROR:
-                      driver_command->control_word = ANYDriveControlWord::CLEAR_ERRORS_TO_STANDBY;
-                      break;
-                    case ANYDriveFSMState::CONFIGURE:
-                      driver_command->control_word = ANYDriveControlWord::CONFIGURE_TO_STANDBY;
-                      break;
-                    case ANYDriveFSMState::STANDBY:
-                      driver_command->control_word = ANYDriveControlWord::STANDBY_TO_MOTOR_PRE_OP;
-                      break;
-                    case ANYDriveFSMState::MOTOR_OP:
-                      driver_command->control_word = ANYDriveControlWord::MOTOR_OP_TO_CONTROL_OP;
-                      break;
-                    case ANYDriveFSMState::CONTROL_OP:
-                      ROS_INFO("Switch to Control_OP");
-                      driver_command->control_word = 0;
-                      switch (joint_control_methods_[i]) {
-                        case EFFORT:
-                          driver_command->mode_of_operation = ANYDriveModeOfOperation::JOINT_TORQUE;
-                          ROS_INFO("Switch to Joint Torque Mode");
-                          break;
-                        case VELOCITY:
-                          driver_command->mode_of_operation = ANYDriveModeOfOperation::JOINT_VELOCITY;
-                          ROS_INFO("Switch to Joint Velocity Mode");
-                          break;
-                        case POSITION:
-                          driver_command->mode_of_operation = ANYDriveModeOfOperation::JOINT_POSITION;
-                          ROS_INFO("Switch to Joint Position Mode ");
-                          break;
-
-                        }
-                      ROS_INFO("Switch to Control_OP");
-                      if(i==ec_slavecount-1)
-                        return true;
-                    }
-
-                }
-              return false;
-            }
-
+  SlaveType type = slaves_type_[id];
+  if(type == SlaveType::ANYDRIVE)
+    {
+      switch (ANYdriveRPDOType_) {
+        case PDOTYPE::RPDO_A:
+          {
+            ANYDriveRPDOA* driver_command;
+            driver_command = (struct ANYDriveRPDOA*)ec_slave[id+1].outputs;
+            //! WSHY: for mode of operation
+            if(mode_of_operation == "Position")
+              {
+                driver_command->mode_of_operation = ANYDriveModeOfOperation::JOINT_POSITION;
+              }
+            else if(mode_of_operation == "Velocity")
+              {
+                driver_command->mode_of_operation = ANYDriveModeOfOperation::JOINT_VELOCITY;
+              }
+            else if(mode_of_operation == "Torque")
+              {
+                driver_command->mode_of_operation = ANYDriveModeOfOperation::JOINT_TORQUE;
+              }
+            else if(mode_of_operation == "Freeze")
+              driver_command->mode_of_operation = ANYDriveModeOfOperation::FREEZE;
+            else if(mode_of_operation == "Disable")
+              driver_command->mode_of_operation = ANYDriveModeOfOperation::DISABLE;
+            break;
           }
-
-        break;
-      }
-    case SlaveType::ELMOGOLDEN:
-      {
-        break;
-      }
+        default:
+          {
+            ANYDriveRPDOA* driver_command;
+            driver_command = (struct ANYDriveRPDOA*)ec_slave[id+1].outputs;
+            //! WSHY: for mode of operation
+            if(mode_of_operation == "Position")
+              {
+                driver_command->mode_of_operation = ANYDriveModeOfOperation::JOINT_POSITION;
+              }
+            else if(mode_of_operation == "Velocity")
+              {
+                driver_command->mode_of_operation = ANYDriveModeOfOperation::JOINT_VELOCITY;
+              }
+            else if(mode_of_operation == "Torque")
+              {
+                driver_command->mode_of_operation = ANYDriveModeOfOperation::JOINT_TORQUE;
+              }
+            else if(mode_of_operation == "Freeze")
+              driver_command->mode_of_operation = ANYDriveModeOfOperation::FREEZE;
+            else if(mode_of_operation == "Disable")
+              driver_command->mode_of_operation = ANYDriveModeOfOperation::DISABLE;
+          }
+          return true;
+        }
     }
+  if(type == SlaveType::GOLDENTWITTER)
+    {
+      switch (GoldenTwitterRPDOType_) {
+        case PDOTYPE::RPDO_F:
+          {
+            GoldenTwitterRPDOF* driver_command;
+            driver_command = (struct GoldenTwitterRPDOF*)ec_slave[id+1].outputs;
+            //! WSHY: for mode of operation
+            if(mode_of_operation == "Position")
+              {
+                driver_command->mode_of_operation = GoldenTwitterModeOfOperation::PROFILE_POSITION;
+              }
+            else if(mode_of_operation == "Velocity")
+              {
+                driver_command->mode_of_operation = GoldenTwitterModeOfOperation::SYNC_VELOCITY;
+              }
+            else if(mode_of_operation == "Torque")
+              {
+                driver_command->mode_of_operation = GoldenTwitterModeOfOperation::SYNC_TORQUE;
+              }
+            else if (mode_of_operation == "Cyclic Position") {
+                driver_command->mode_of_operation = GoldenTwitterModeOfOperation::SYNC_POSITION;
+              }
+//            else if(mode_of_operation == "Freeze")
+//              driver_command->mode_of_operation = GoldenTwitterModeOfOperation::FREEZE;
+//            else if(mode_of_operation == "Disable")
+//              driver_command->mode_of_operation = GoldenTwitterModeOfOperation::DISABLE;
+            break;
+          }
+        default:
+          {
+            GoldenTwitterRPDOF* driver_command;
+            driver_command = (struct GoldenTwitterRPDOF*)ec_slave[id+1].outputs;
+            //! WSHY: for mode of operation
+            if(mode_of_operation == "Position")
+              {
+                driver_command->mode_of_operation = GoldenTwitterModeOfOperation::PROFILE_POSITION;
+              }
+            else if(mode_of_operation == "Velocity")
+              {
+                driver_command->mode_of_operation = GoldenTwitterModeOfOperation::SYNC_VELOCITY;
+              }
+            else if(mode_of_operation == "Torque")
+              {
+                driver_command->mode_of_operation = GoldenTwitterModeOfOperation::SYNC_TORQUE;
+              }
+            break;
+          }
+          return true;
+        }
+    }
+  return false;
+}
+bool RobotStateEtherCATHardwareInterface::setControlMethod(const std::string& method)
+{
+
+  if(method == "Joint Position")
+    {
+      for(int i = 0;i<ec_slavecount;i++)
+        {
+          joint_control_methods_[i] = POSITION;
+          setModeOfOperation(i, "Position");
+        }
+      return true;
+    }
+  if(method == "Joint Cyclic Position")
+    {
+      for(int i = 0;i<ec_slavecount;i++)
+        {
+          joint_control_methods_[i] = POSITION;
+          setModeOfOperation(i, "Cyclic Position");
+        }
+      return true;
+    }else if (method == "Joint Velocity") {
+      for(int i = 0;i<ec_slavecount;i++)
+        {
+          joint_control_methods_[i] = VELOCITY;
+          setModeOfOperation(i, "Velocity");
+        }
+      return true;
+    }else if (method == "Joint Effort" || method == "Balance") {
+      for(int i = 0;i<ec_slavecount;i++)
+        {
+          joint_control_methods_[i] = EFFORT;
+          setModeOfOperation(i, "Torque");
+        }
+      return true;
+    }
+  return false;
+}
+
+bool RobotStateEtherCATHardwareInterface::InitSlaves(const std::vector<SlaveType>& slave_type)
+{
+ bool success = false;
+ int init_count = 0;
+ for(int i=0;i<ec_slavecount;i++)
+   {
+    switch (slave_type[i]) {
+      case SlaveType::ANYDRIVE:
+        {
+          switch (ANYdriveTPDOType_) {
+            case PDOTYPE::TPDO_A:
+              {
+                ANYDriveRPDOA* driver_command;
+                ANYDriveTPDOA* driver_feedback;
+  //              for(int i=0;i<ec_slavecount;i++)
+  //                {
+                driver_feedback = (struct ANYDriveTPDOA*)ec_slave[i+1].inputs;
+                driver_command = (struct ANYDriveRPDOA*)ec_slave[i+1].outputs;
+                switch ((driver_feedback->state<<28)>>28) {
+                  case ANYDriveFSMState::ERROR:
+                    driver_command->control_word = ANYDriveControlWord::CLEAR_ERRORS_TO_STANDBY;
+                    break;
+                  case ANYDriveFSMState::CONFIGURE:
+                    driver_command->control_word = ANYDriveControlWord::CONFIGURE_TO_STANDBY;
+                    break;
+                  case ANYDriveFSMState::STANDBY:
+                    driver_command->control_word = ANYDriveControlWord::STANDBY_TO_MOTOR_PRE_OP;
+                    break;
+                  case ANYDriveFSMState::MOTOR_OP:
+                    driver_command->control_word = ANYDriveControlWord::MOTOR_OP_TO_CONTROL_OP;
+                    break;
+                  case ANYDriveFSMState::CONTROL_OP:
+                    ROS_INFO("Switch to Control_OP");
+                    driver_command->control_word = 0;
+                    init_count++;
+                    switch (joint_control_methods_[i]) {
+                      case EFFORT:
+                        driver_command->mode_of_operation = ANYDriveModeOfOperation::JOINT_TORQUE;
+                        ROS_INFO("Switch to Joint Torque Mode");
+                        break;
+                      case VELOCITY:
+                        driver_command->mode_of_operation = ANYDriveModeOfOperation::JOINT_VELOCITY;
+                        ROS_INFO("Switch to Joint Velocity Mode");
+                        break;
+                      case POSITION:
+                        driver_command->mode_of_operation = ANYDriveModeOfOperation::JOINT_POSITION;
+                        ROS_INFO("Switch to Joint Position Mode ");
+                        break;
+                      case FREEZE:
+                        driver_command->mode_of_operation =ANYDriveModeOfOperation::FREEZE;
+                        ROS_INFO("Switch to Joint Position Mode ");
+                        break;
+                      }
+                    ROS_INFO("Switch to Control_OP");
+                    if(init_count==motor_slave_num_)
+                      {
+                        success = true;
+                      }else{
+                        success = false;
+                      }
+                  }
+
+  //                }
+  //              return false;
+
+                  break;
+              }
+            default:
+              {
+                ANYDriveRPDOA* driver_command;
+                ANYDriveTPDOA* driver_feedback;
+  //              for(int i=0;i<ec_slavecount;i++)
+  //                {
+                    driver_feedback = (struct ANYDriveTPDOA*)ec_slave[i+1].inputs;
+                    driver_command = (struct ANYDriveRPDOA*)ec_slave[i+1].outputs;
+                    switch ((driver_feedback->state<<28)>>28) {
+                      case ANYDriveFSMState::ERROR:
+                        driver_command->control_word = ANYDriveControlWord::CLEAR_ERRORS_TO_STANDBY;
+                        break;
+                      case ANYDriveFSMState::CONFIGURE:
+                        driver_command->control_word = ANYDriveControlWord::CONFIGURE_TO_STANDBY;
+                        break;
+                      case ANYDriveFSMState::STANDBY:
+                        driver_command->control_word = ANYDriveControlWord::STANDBY_TO_MOTOR_PRE_OP;
+                        break;
+                      case ANYDriveFSMState::MOTOR_OP:
+                        driver_command->control_word = ANYDriveControlWord::MOTOR_OP_TO_CONTROL_OP;
+                        break;
+                      case ANYDriveFSMState::CONTROL_OP:
+                        ROS_INFO("Switch to Control_OP");
+                        driver_command->control_word = 0;
+                        init_count++;
+                        switch (joint_control_methods_[i]) {
+                          case EFFORT:
+                            driver_command->mode_of_operation = ANYDriveModeOfOperation::JOINT_TORQUE;
+                            ROS_INFO("Switch to Joint Torque Mode");
+                            break;
+                          case VELOCITY:
+                            driver_command->mode_of_operation = ANYDriveModeOfOperation::JOINT_VELOCITY;
+                            ROS_INFO("Switch to Joint Velocity Mode");
+                            break;
+                          case POSITION:
+                            driver_command->mode_of_operation = ANYDriveModeOfOperation::JOINT_POSITION;
+                            ROS_INFO("Switch to Joint Position Mode ");
+                            break;
+
+                          }
+                        ROS_INFO("Switch to Control_OP");
+                        if(init_count==motor_slave_num_)
+                          {
+                            success = true;
+                          }else{
+                            success = false;
+                          }
+                      }
+
+  //                }
+  //              return false;
+//               success = false;
+               break;
+              }
+
+            }
+
+          break;
+        }
+      case SlaveType::GOLDENTWITTER:
+        {
+          switch (GoldenTwitterTPDOType_) {
+            case PDOTYPE::TPDO_F:
+              {
+                GoldenTwitterRPDOF* driver_command;
+                GoldenTwitterTPDOF* driver_feedback;
+  //              for(int i=0;i<ec_slavecount;i++)
+  //                {
+                driver_feedback = (struct GoldenTwitterTPDOF*)ec_slave[i+1].inputs;
+                driver_command = (struct GoldenTwitterRPDOF*)ec_slave[i+1].outputs;
+                switch ((driver_feedback->status_word & 0b01101111)) {
+                  case GoldenTwitterState::NOT_READY_TO_SWITCH_ON:
+                    driver_command->control_word = GoldenTwitterControlWord::SHUT_DOWN;
+                    break;
+                  case GoldenTwitterState::SWITCH_ON_DISABLED:
+                    driver_command->control_word = GoldenTwitterControlWord::SHUT_DOWN;
+                    break;
+                  case GoldenTwitterState::READY_TO_SWITCH_ON:
+                    driver_command->control_word = GoldenTwitterControlWord::SWITCH_ON;
+                    break;
+                  case GoldenTwitterState::SWITCHED_ON:
+                    driver_command->control_word = GoldenTwitterControlWord::ENABLE_OP;
+                    break;
+                  case GoldenTwitterState::QUICK_STOP_ACTIVED:
+                    driver_command->control_word = GoldenTwitterControlWord::DISABLE_VOLTAGE;
+                    break;
+                  case GoldenTwitterState::FAULT:
+                    driver_command->control_word = GoldenTwitterControlWord::FAULT_RESET;
+                    break;
+                  case GoldenTwitterState::OP_ENABLED:
+                    ROS_INFO("Switch to Control_OP");
+                    init_count++;
+                    switch (joint_control_methods_[i]) {
+                      case POSITION:
+                        driver_command->mode_of_operation = GoldenTwitterModeOfOperation::PROFILE_POSITION;
+                        ROS_INFO("Switch to Joint Torque Mode");
+                        break;
+                      case VELOCITY:
+                        driver_command->mode_of_operation = GoldenTwitterModeOfOperation::SYNC_VELOCITY;
+                        ROS_INFO("Switch to Joint Velocity Mode");
+                        break;
+                      case EFFORT:
+                        driver_command->mode_of_operation = GoldenTwitterModeOfOperation::SYNC_TORQUE;
+                        ROS_INFO("Switch to Joint Position Mode ");
+                        break;
+//                      case FREEZE:
+//                        driver_command->mode_of_operation =ANYDriveModeOfOperation::FREEZE;
+//                        ROS_INFO("Switch to Joint Position Mode ");
+//                        break;
+                      }
+                    ROS_INFO("Switch to Control_OP");
+                    if(init_count==motor_slave_num_)
+                      {
+                        success = true;
+                      }else{
+                        success = false;
+                      }
+                  }
+
+  //                }
+  //              return false;
+
+                  break;
+              }
+            }
+
+          break;
+        }
+      case SlaveType::JUNCTION:
+        {
+          break;
+        }
+      }
+  }
+  if(!success)
+    return false;
   return true;
 }
 
@@ -704,35 +1195,77 @@ bool RobotStateEtherCATHardwareInterface::setPDOType(const std::string& name, co
     {
       if(type == "PDOA")
         {
-          TPDOType_ = ANYDrivePDOTYPE::TPDO_A;
-          RPDOType_ = ANYDrivePDOTYPE::RPDO_A;
+          ANYdriveTPDOType_ = PDOTYPE::TPDO_A;
+          ANYdriveRPDOType_ = PDOTYPE::RPDO_A;
         }
       if(type == "PDOB")
         {
-          TPDOType_ = ANYDrivePDOTYPE::TPDO_B;
-          RPDOType_ = ANYDrivePDOTYPE::RPDO_B;
+          ANYdriveTPDOType_ = PDOTYPE::TPDO_B;
+          ANYdriveRPDOType_ = PDOTYPE::RPDO_B;
         }
       if(type == "PDOC")
         {
-          TPDOType_ = ANYDrivePDOTYPE::TPDO_C;
-          RPDOType_ = ANYDrivePDOTYPE::RPDO_C;
+          ANYdriveTPDOType_ = PDOTYPE::TPDO_F;
+          ANYdriveRPDOType_ = PDOTYPE::RPDO_C;
         }
       if(type == "PDOD")
         {
-          TPDOType_ = ANYDrivePDOTYPE::TPDO_D;
-          RPDOType_ = ANYDrivePDOTYPE::RPDO_D;
+          ANYdriveTPDOType_ = PDOTYPE::TPDO_D;
+          ANYdriveRPDOType_ = PDOTYPE::RPDO_D;
         }
     }
-  if(name == "Golden")
+  if(name == "Twitter")
     {
-
+      if(type == "PDOA")
+        {
+          GoldenTwitterTPDOType_ = PDOTYPE::TPDO_F;
+          GoldenTwitterRPDOType_ = PDOTYPE::RPDO_F;
+        }
+      if(type == "PDOB")
+        {
+          GoldenTwitterTPDOType_ = PDOTYPE::TPDO_B;
+          GoldenTwitterRPDOType_ = PDOTYPE::RPDO_B;
+        }
+      if(type == "PDOC")
+        {
+          GoldenTwitterTPDOType_ = PDOTYPE::TPDO_F;
+          GoldenTwitterRPDOType_ = PDOTYPE::RPDO_C;
+        }
+      if(type == "PDOD")
+        {
+          GoldenTwitterTPDOType_ = PDOTYPE::TPDO_D;
+          GoldenTwitterRPDOType_ = PDOTYPE::RPDO_D;
+        }
     }
 }
 
+bool RobotStateEtherCATHardwareInterface::writeSDO(uint16 id, uint16 index,
+                                                   uint8 sub_index, void *value, int size)
+{
+  ROS_INFO("In SDO Write");
+  std::cout<<"value to write :"<<value<<std::endl;
+  uint32 data;
+  memcpy(&data, value, size);
+  std::cout<<"data to write :"<<data<<std::endl;
+  ecx_SDOwrite(&ecx_context, id, index, sub_index, FALSE, size, &data, EC_TIMEOUTRXM);
+  return true;
+
+}
+bool RobotStateEtherCATHardwareInterface::readSDO(uint16 id, uint16 index, uint8 sub_index, char* result)
+{
+  char usdo[128];
+//  char sdo_value[1024] = " ";
+  int l = sizeof(usdo) - 1;
+  ecx_SDOread(&ecx_context, id, index, sub_index, FALSE, &l, &usdo, EC_TIMEOUTRXM);
+  strcpy(result, usdo);
+//  return sdo_value;
+  return true;
+}
 bool RobotStateEtherCATHardwareInterface::EtherCATInit()
 {
 //  anydriveTest(ifname);
   ROS_INFO("Starting EtherCAT Init");
+  currentgroup = 0;
   /* initialise SOEM, bind socket to ifname */
   if (ecx_init(&ecx_context,ifname))
   {
@@ -745,26 +1278,115 @@ bool RobotStateEtherCATHardwareInterface::EtherCATInit()
         printf("%d slaves found and configured.\n",ec_slavecount);
         feedbacks_.resize(ec_slavecount);
         commands_.resize(ec_slavecount);
+//         slaves_type_.resize(ec_slavecount);
+        motor_slave_num_ = 0;
+        slaves_type_.clear();
 
+
+        char usdo[128];
         for (int i=1; i<=ec_slavecount; i++) {
+            bool hasCA = ec_slave[i].CoEdetails & ECT_COEDET_SDOCA ? true : false;
             printf("Slave %d has CA? %s\n", i, ec_slave[i].CoEdetails & ECT_COEDET_SDOCA ? "true":"false" );
+
+            char sdo_name[128] = " ";
+            if(hasCA)
+              {
+
+                int l = sizeof(usdo) - 1;
+                readSDO(i,0x1008,0,sdo_name);
+//                ecx_SDOread(&ecx_context, i, 0x1008, 0, FALSE, &l, &usdo, EC_TIMEOUTRXM);
+//                strcpy(sdo_name, usdo);
+
+                printf("Read Device Name From SDO of %d is :%s", i, sdo_name);
+              }
             int32 ob2;int os;
-            os=sizeof(ob2); ob2 = RPDOType_;//ANYDrivePDOTYPE::RPDO_A;// 0x16030001;
-            ecx_SDOwrite(&ecx_context, i, 0x1c12, 0, TRUE, os, &ob2, EC_TIMEOUTRXM);
-            os=sizeof(ob2); ob2 = TPDOType_;//ANYDrivePDOTYPE::TPDO_A;//0x1a030001;
-            ecx_SDOwrite(&ecx_context, i, 0x1c13, 0, TRUE, os, &ob2, EC_TIMEOUTRXM);
+            os=sizeof(ob2);
+            if(strcmp(ec_slave[i].name, "ANYdrive") == 0)
+            {
+               ROS_WARN("Configue ANYdrive RPDO");
+               motor_slave_num_++;
+               ob2 = ANYdriveRPDOType_;//PDOTYPE::RPDO_A;// 0x16030001;
+               ecx_SDOwrite(&ecx_context, i, 0x1c12, 0, TRUE, os, &ob2, EC_TIMEOUTRXM);
+               slaves_type_.push_back(SlaveType::ANYDRIVE);
+            }else if (strcmp(sdo_name, "Twitter") == 0) {
+               ROS_WARN("Configue GoldenTwitter RPDO");
+               strcpy(ec_slave[i].name, sdo_name);
+               motor_slave_num_++;
+               ob2 = GoldenTwitterRPDOType_;//PDOTYPE::RPDO_A;// 0x16030001;
+               slaves_type_.push_back(SlaveType::GOLDENTWITTER);
+               uint32 u32= 5000000;
+               //! WSHY: set profile acc and deacc for PP mode
+               writeSDO(i, 0x6081, 0, &u32, sizeof (u32));
+               u32= 10000000;
+               writeSDO(i, 0x6083, 0, &u32, sizeof (u32));
+               writeSDO(i, 0x6084, 0, &u32, sizeof (u32));
+               int16 i16 = 2;
+               int8 i8 = 2;
+               //! WSHY: set extrapolation timeout for cyclic mode
+               writeSDO(i, 0x60C2, 1, &i8, sizeof (i8));
+               writeSDO(i, 0x2F75, 0, &i16, sizeof (i16));
+
+               ecx_SDOwrite(&ecx_context, i, 0x1c12, 0, TRUE, os, &ob2, EC_TIMEOUTRXM);
+            } else{
+              ROS_WARN("Add A Junction Slave");
+              slaves_type_.push_back(SlaveType::JUNCTION);
+              continue;
+            }
+
+//            ecx_SDOwrite(&ecx_context, i, 0x1c12, 0, TRUE, os, &ob2, EC_TIMEOUTRXM);
+
+
+//            int32 rpdo = 0x1605;
+//            ecx_SDOwrite(&ecx_context, i, 0x1c12, 1, FALSE, sizeof (rpdo), &rpdo, EC_TIMEOUTRXM);
+//            rpdo = 0x16050002;
+//            ecx_SDOwrite(&ecx_context, i, 0x1c12, 2, TRUE, sizeof (rpdo), &rpdo, EC_TIMEOUTRXM);
+//            ob2 = 2;
+//            ecx_SDOwrite(&ecx_context, i, 0x1c12, 0, FALSE, os, &ob2, EC_TIMEOUTRXM);
+            os=sizeof(ob2); ob2 = ANYdriveTPDOType_;//PDOTYPE::TPDO_A;//0x1a030001;
+             if(strcmp(ec_slave[i].name, "ANYdrive") == 0)
+             {
+                ROS_WARN("Configue ANYdrive TPDO");
+                ob2 = ANYdriveTPDOType_;//PDOTYPE::TPDO_A;//0x1a030001;
+                ecx_SDOwrite(&ecx_context, i, 0x1c13, 0, TRUE, os, &ob2, EC_TIMEOUTRXM);
+             }else if (strcmp(sdo_name, "Twitter") == 0) {
+                ROS_WARN("Configue GoldenTwitter TPDO");
+                ob2 = GoldenTwitterTPDOType_;//PDOTYPE::TPDO_A;//0x1a030001;
+                //! WSHY: set 1c13:0 to 0 to disable sync manager, then set pdo assignment
+                //! finally set 2 as the entrys of 1c13
+                uint8 u8 = 0;
+                ecx_SDOwrite(&ecx_context, i, 0x1c13, 0, FALSE, sizeof (u8), &u8, EC_TIMEOUTRXM);
+                uint64 tpdo = 0x1A0F; // PDO of actual velocity 6069
+                ecx_SDOwrite(&ecx_context, i, 0x1c13, 1, FALSE, sizeof (tpdo), &tpdo, EC_TIMEOUTRXM);
+                tpdo = 0x1A02; // RPDO_C
+                ecx_SDOwrite(&ecx_context, i, 0x1c13, 2, FALSE, sizeof (tpdo), &tpdo, EC_TIMEOUTRXM);
+                u8 = 2;
+                ecx_SDOwrite(&ecx_context, i, 0x1c13, 0, FALSE, sizeof (u8), &u8, EC_TIMEOUTRXM);
+
+             }else{
+                 continue;
+               }
+//            ecx_SDOwrite(&ecx_context, i, 0x1c13, 0, TRUE, os, &ob2, EC_TIMEOUTRXM);
+            //            ROS_WARN("psize is %d\n", sizeof (tpdo));
         }
 
         for (int i=1; i<=ec_slavecount; i++) {
             //! WSHY: the ANYDrive is not support LRW(Logical READ&WRITE) but, it can't read
             //! by the upload slave info, so we manually assigned the value to Block LRW, before
             //! ec_config_map set it to ec_context.
-            ec_slave[i].blockLRW = 1;
+            ROS_INFO("EC group of %d is group %d", i, ec_slave[i].group);
+            if(strcmp(ec_slave[i].name, "ANYdrive") == 0)
+              {
+                ec_slave[i].blockLRW = 1;
+                ROS_INFO("Change LDR for ANYdrive");
+              }
         }
         //! WSHY: map the all input and output of all slaves to a static array
         ecx_config_map_group(&ecx_context, &IOmap, 0);
 
         ecx_configdc(&ecx_context);
+
+        expectedWKC = (ec_group[0].outputsWKC * 2) + ec_group[0].inputsWKC;
+        printf("Calculated workcounter %d\n", expectedWKC);
 
         printf("Slaves mapped, state to SAFE_OP.\n");
         /* wait for all slaves to reach SAFE_OP state */
@@ -777,9 +1399,9 @@ bool RobotStateEtherCATHardwareInterface::EtherCATInit()
 
         for (int i=1; i<=ec_slavecount; i++) {
             // show slave info
-            printf("\nSlave:%d\n Name:%s\n Output size: %dbits\n Input size: %dbits\n State: %d\n Delay: %d[ns]\n Has DC: %d\n",
+            printf("\nSlave:%d\n Name:%s\n Output size: %dbits\n Input size: %dbits\n State: %d\n Delay: %d[ns]\n Has DC: %d\n Address: %d\n",
             i, ec_slave[i].name, ec_slave[i].Obits, ec_slave[i].Ibits,
-            ec_slave[i].state, ec_slave[i].pdelay, ec_slave[i].hasdc);
+            ec_slave[i].state, ec_slave[i].pdelay, ec_slave[i].hasdc, ec_slave[i].configadr);
             ec_slave[i].state = EC_STATE_OPERATIONAL;
             //! WSHY: assigned the inputs and outputs pointer to out read and write data struct
 //            feedbacks_[i-1] = (struct ANYDriveTPDOA *)(ec_slave[i].inputs);
@@ -826,22 +1448,105 @@ bool RobotStateEtherCATHardwareInterface::EtherCATInit()
 
 }
 
+void RobotStateEtherCATHardwareInterface::EtherCATCheck()
+{
+  int slave;
+  ros::Rate rate(100);
+  while(ros::ok())
+  {
+      if( inOP && ((wkc < expectedWKC) || ec_group[currentgroup].docheckstate))
+      {
+          if (needlf)
+          {
+             needlf = FALSE;
+             printf("\n");
+          }
+          /* one ore more slaves are not responding */
+          ec_group[currentgroup].docheckstate = FALSE;
+          ecx_readstate(&ecx_context);
+          for (slave = 1; slave <= ec_slavecount; slave++)
+          {
+             if ((ec_slave[slave].group == currentgroup) && (ec_slave[slave].state != EC_STATE_OPERATIONAL))
+             {
+                ec_group[currentgroup].docheckstate = TRUE;
+                if (ec_slave[slave].state == (EC_STATE_SAFE_OP + EC_STATE_ERROR))
+                {
+                   printf("ERROR : slave %d is in SAFE_OP + ERROR, attempting ack.\n", slave);
+                   ec_slave[slave].state = (EC_STATE_SAFE_OP + EC_STATE_ACK);
+                   ecx_writestate(&ecx_context, slave);
+                }
+                else if(ec_slave[slave].state == EC_STATE_SAFE_OP)
+                {
+                   printf("WARNING : slave %d is in SAFE_OP, change to OPERATIONAL.\n", slave);
+                   ec_slave[slave].state = EC_STATE_OPERATIONAL;
+                   ecx_writestate(&ecx_context, slave);
+                }
+                else if(ec_slave[slave].state > 0x00)//EC_STATE_NONE)
+                {
+                   if (ecx_reconfig_slave(&ecx_context, slave, EC_TIMEOUTMON))
+                   {
+                      ec_slave[slave].islost = FALSE;
+                      printf("MESSAGE : slave %d reconfigured\n",slave);
+                   }
+                }
+                else if(!ec_slave[slave].islost)
+                {
+                   /* re-check state */
+                   ecx_statecheck(&ecx_context, slave, EC_STATE_OPERATIONAL, EC_TIMEOUTRET);
+                   if (ec_slave[slave].state == 0x00)//EC_STATE_NONE)
+                   {
+                      ec_slave[slave].islost = TRUE;
+                      printf("ERROR : slave %d lost\n",slave);
+                   }
+                }
+             }
+             if (ec_slave[slave].islost)
+             {
+                if(ec_slave[slave].state == 0x00)//EC_STATE_NONE)
+                {
+                   if (ecx_recover_slave(&ecx_context, slave, EC_TIMEOUTMON))
+                   {
+                      ec_slave[slave].islost = FALSE;
+                      printf("MESSAGE : slave %d recovered\n",slave);
+                   }
+                }
+                else
+                {
+                   ec_slave[slave].islost = FALSE;
+                   printf("MESSAGE : slave %d found\n",slave);
+                }
+             }
+          }
+          if(!ec_group[currentgroup].docheckstate)
+             printf("OK : all slaves resumed OPERATIONAL.\n");
+      }
+      osal_usleep(10000);
+  }
+}
 bool RobotStateEtherCATHardwareInterface::createEtherCATLoopThread()
 {
   EtherCATLoopThread_ = boost::thread(boost::bind(&RobotStateEtherCATHardwareInterface::EtherCATLoop, this));
   return true;
 }
 
+bool RobotStateEtherCATHardwareInterface::createEtherCATCheckThread()
+{
+  EtherCATCheckThread_ = boost::thread(boost::bind(&RobotStateEtherCATHardwareInterface::EtherCATCheck, this));
+  return true;
+}
+
 void RobotStateEtherCATHardwareInterface::EtherCATLoop()
 {
   ROS_INFO("Starting EtherCAT update loop");
+  inOP = true;
   if (ec_slave[0].state == EC_STATE_OPERATIONAL )
   {
+
       ros::Rate rate(500);
       while (ros::ok()) {
           ecx_send_processdata(&ecx_context);
-          int wkc = ecx_receive_processdata(&ecx_context, EC_TIMEOUTRET);
-
+          wkc = ecx_receive_processdata(&ecx_context, EC_TIMEOUTRET);
+//          ROS_INFO("Worker Count is : %d", wkc);
           rate.sleep();
         }
     }
@@ -852,10 +1557,13 @@ void RobotStateEtherCATHardwareInterface::EtherCATLoop()
 void RobotStateEtherCATHardwareInterface::EtherCATLoop(const ros::TimerEvent&)
 {
 //  ROS_INFO("Starting EtherCAT update loop");
+  inOP = true;
   if (ec_slave[0].state == EC_STATE_OPERATIONAL )
   {
+
           ecx_send_processdata(&ecx_context);
-          int wkc = ecx_receive_processdata(&ecx_context, EC_TIMEOUTRET);
+          wkc = ecx_receive_processdata(&ecx_context, EC_TIMEOUTRET);
+//          ROS_INFO("Worker Count is : %d", wkc);
     }
 
 }
@@ -873,50 +1581,117 @@ void RobotStateEtherCATHardwareInterface::read(const ros::Time& time, const ros:
   //! WSHY: copy the date in struct uodated in EtherCAT Loop, for thread safe
 //  std::vector<ANYDriveTPDOA> driver_feedbacks;
   boost::recursive_mutex::scoped_lock lock(r_mutex_);
-  switch (TPDOType_) {
-    case ANYDrivePDOTYPE::TPDO_A:
-      {
-        ANYDriveTPDOA driver_feedback;
-        for(int j=0;j<ec_slavecount;j++)
-          {
-            driver_feedback = (*(struct ANYDriveTPDOA*)ec_slave[j+1].inputs);
+  int junction_count = 0;
+  for(int i=0;i<ec_slavecount;i++)
+    {
+      if(slaves_type_[i] == SlaveType::ANYDRIVE)
+        {
+          int j = i - junction_count;
+          switch (ANYdriveTPDOType_) {
+            case PDOTYPE::TPDO_A:
+              {
+                ANYDriveTPDOA driver_feedback;
+                //        for(int j=0;j<ec_slavecount;j++)
+                //          {
+                driver_feedback = (*(struct ANYDriveTPDOA*)ec_slave[i+1].inputs);
 
-            exchage8bytes_.int64data = driver_feedback.joint_position;
-            joint_position_[j] = exchage8bytes_.doubledata;
-            robot_state_data_.joint_position_read[j] = exchage8bytes_.doubledata;
+                exchage8bytes_.int64data = driver_feedback.joint_position;
+                joint_position_[j-junction_count] = exchage8bytes_.doubledata;
+                robot_state_data_.joint_position_read[j-junction_count] = exchage8bytes_.doubledata;
 
-            exchage4bytes_.int32data = driver_feedback.joint_velocity;
-            joint_velocity_[j] = exchage4bytes_.floatdata;
-            robot_state_data_.joint_velocity_read[j] = exchage4bytes_.floatdata;
+                exchage4bytes_.int32data = driver_feedback.joint_velocity;
+                joint_velocity_[j-junction_count] = exchage4bytes_.floatdata;
+                robot_state_data_.joint_velocity_read[j-junction_count] = exchage4bytes_.floatdata;
 
-            exchage4bytes_.int32data = driver_feedback.joint_torque;
-            joint_effort_[j] = exchage4bytes_.floatdata;
-            robot_state_data_.joint_effort_read[j] = exchage4bytes_.floatdata;
+                exchage4bytes_.int32data = driver_feedback.joint_torque;
+                joint_effort_[j-junction_count] = exchage4bytes_.floatdata;
+                robot_state_data_.joint_effort_read[j-junction_count] = exchage4bytes_.floatdata;
 
-          }
-        break;
-      }
-    default:
-      {
-        ANYDriveTPDOA driver_feedback;
-        for(int j=0;j<ec_slavecount;j++)
-          {
-            driver_feedback = (*(struct ANYDriveTPDOA*)ec_slave[j+1].inputs);
+                //          }
+                break;
+              }
+            default:
+              {
+                ANYDriveTPDOA driver_feedback;
+                //        for(int j=0;j<ec_slavecount;j++)
+                //          {
+                driver_feedback = (*(struct ANYDriveTPDOA*)ec_slave[i+1].inputs);
 
-            exchage8bytes_.int64data = driver_feedback.joint_position;
-            joint_position_[j] = exchage8bytes_.doubledata;
-            robot_state_data_.joint_position_read[j] = exchage8bytes_.doubledata;
+                exchage8bytes_.int64data = driver_feedback.joint_position;
+                joint_position_[j] = exchage8bytes_.doubledata;
+                robot_state_data_.joint_position_read[j] = exchage8bytes_.doubledata;
 
-            exchage4bytes_.int32data = driver_feedback.joint_velocity;
-            joint_velocity_[j] = exchage4bytes_.floatdata;
-            robot_state_data_.joint_velocity_read[j] = exchage4bytes_.floatdata;
+                exchage4bytes_.int32data = driver_feedback.joint_velocity;
+                joint_velocity_[j] = exchage4bytes_.floatdata;
+                robot_state_data_.joint_velocity_read[j] = exchage4bytes_.floatdata;
 
-            exchage4bytes_.int32data = driver_feedback.joint_torque;
-            joint_effort_[j] = exchage4bytes_.floatdata;
-            robot_state_data_.joint_effort_read[j] = exchage4bytes_.floatdata;
+                exchage4bytes_.int32data = driver_feedback.joint_torque;
+                joint_effort_[j] = exchage4bytes_.floatdata;
+                robot_state_data_.joint_effort_read[j] = exchage4bytes_.floatdata;
 
-          }
-      }
+                //          }
+                break;
+              }
+            }
+          continue;
+        }
+      if(slaves_type_[i] == SlaveType::GOLDENTWITTER)
+        {
+          ROS_INFO("Read from Twitter");
+          int j = i - junction_count;
+          switch (GoldenTwitterTPDOType_) {
+            case PDOTYPE::TPDO_F:
+              {
+                GoldenTwitterTPDOF* driver_feedback;
+                driver_feedback = (struct GoldenTwitterTPDOF*)ec_slave[i+1].inputs;
+
+                double position = 2 * M_PI * driver_feedback->motor_position/(TWITTER_ENCODER_RES*TWITTER_GEAR_RATIO);
+                // rpm on load
+                double velocity = 60.0 * driver_feedback->motor_velocity/(TWITTER_ENCODER_RES*TWITTER_GEAR_RATIO*2*M_PI);
+                // percent of max torque
+                double effort = driver_feedback->motor_torque/10;
+
+//                double last_joint_position = joint_position_[j];
+                joint_position_[j] = position;
+                robot_state_data_.joint_position_read[j] = position;
+
+//                float joint_velocity = (joint_position_[j] - last_joint_position)/period.toSec();
+                joint_velocity_[j] = velocity;
+                robot_state_data_.joint_velocity_read[j] = velocity;
+
+                joint_effort_[j] = effort;
+                robot_state_data_.joint_effort_read[j] = effort;
+                break;
+              }
+            default:
+              {
+                GoldenTwitterTPDOF driver_feedback;
+                //        for(int j=0;j<ec_slavecount;j++)
+                //          {
+                driver_feedback = (*(struct GoldenTwitterTPDOF*)ec_slave[i+1].inputs);
+                float last_joint_position = joint_position_[j];
+                exchage8bytes_.int64data = driver_feedback.motor_position;
+                joint_position_[j] = exchage8bytes_.doubledata;
+                robot_state_data_.joint_position_read[j] = exchage8bytes_.doubledata;
+
+                float joint_velocity = (joint_position_[j] - last_joint_position)/period.toSec();
+                joint_velocity_[j] = joint_velocity;
+                robot_state_data_.joint_velocity_read[j] = joint_velocity;
+//                exchage4bytes_.int32data = driver_feedback.joint_velocity;
+//                joint_velocity_[j] = exchage4bytes_.floatdata;
+//                robot_state_data_.joint_velocity_read[j] = exchage4bytes_.floatdata;
+
+                exchage4bytes_.int32data = driver_feedback.motor_torque;
+                joint_effort_[j] = exchage4bytes_.floatdata;
+                robot_state_data_.joint_effort_read[j] = exchage4bytes_.floatdata;
+
+                //          }
+                break;
+              }
+            }
+          continue;
+        }
+      junction_count++;
     }
   lock.unlock();
 //  boost::recursive_mutex::scoped_lock lock(r_mutex_);
@@ -983,78 +1758,187 @@ void RobotStateEtherCATHardwareInterface::write(const ros::Time& time, const ros
 
 //  std::vector<ANYDriveRPDOA> driver_commands;
 //  driver_commands.resize(n_dof_);
+  int junction_count = 0;
   boost::recursive_mutex::scoped_lock lock(r_mutex_);
-  switch (RPDOType_) {
-    case ANYDrivePDOTYPE::RPDO_A:
-      {
-        ANYDriveRPDOA* driver_command;
-        for(int j = 0;j<ec_slavecount;j++)
-          {
-            driver_command = (struct ANYDriveRPDOA*)ec_slave[j+1].outputs;
-            switch (joint_control_methods_[j])
-            {
-              case EFFORT:
-                {
-                  const double effort = e_stop_active_ ? 0 : joint_effort_command_[j];
-                  exchage4bytes_.floatdata = effort;
-                  ROS_INFO("recieved joint '%d' torque command%f\n", j, effort);
-                  driver_command->desired_joint_torque = exchage4bytes_.int32data;
+  for(int i = 0;i<ec_slavecount;i++)
+    {
+      if(slaves_type_[i] == SlaveType::ANYDRIVE)
+        {
+          int j = i - junction_count;
+          switch (ANYdriveRPDOType_) {
+            case PDOTYPE::RPDO_A:
+              {
+                ANYDriveRPDOA* driver_command;
+                //        for(int j = 0;j<ec_slavecount;j++)
+                //          {
+                driver_command = (struct ANYDriveRPDOA*)ec_slave[i+1].outputs;
+                switch (joint_control_methods_[j])
+                  {
+                  case EFFORT:
+                    {
+                      const double effort = e_stop_active_ ? 0 : joint_effort_command_[j-junction_count];
+                      exchage4bytes_.floatdata = effort;
+                      ROS_INFO("recieved joint '%d' torque command%f\n", j-junction_count, effort);
+                      driver_command->desired_joint_torque = exchage4bytes_.int32data;
+                      break;
+                    }
+                  case POSITION:
+                    {
+                      exchage8bytes_.doubledata = joint_position_command_[j-junction_count];
+                      driver_command->desired_position = exchage8bytes_.int64data;
+                      ROS_INFO("recieved joint '%d' position command%f\n", j-junction_count, joint_position_command_[j-junction_count]);
+                      break;
+                    }
+                  case VELOCITY:
+                    {
+                      const double vel = e_stop_active_ ? 0 : joint_velocity_command_[j-junction_count];
+                      exchage4bytes_.floatdata = vel;
+                      driver_command->desired_velocity = exchage4bytes_.int32data;
+                      ROS_INFO("recieved joint '%d' velocity command%f\n", j-junction_count, joint_velocity_command_[j-junction_count]);
+                      break;
+                    }
+                  }
+                //            ec_slave[j+1].outputs = (uint8 *)&driver_command;
+                //          }
                 break;
-                }
-              case POSITION:
-                {
-                  exchage8bytes_.doubledata = joint_position_command_[j];
-                  driver_command->desired_position = exchage8bytes_.int64data;
-        //          ROS_INFO("recieved joint '%d' position command%f\n", j, joint_position_command_[j]);
-                  break;
-                }
-              case VELOCITY:
-                {
-                  const double vel = e_stop_active_ ? 0 : joint_velocity_command_[j];
-                  exchage4bytes_.floatdata = vel;
-                  driver_command->desired_velocity = exchage4bytes_.int32data;
-                  break;
-                }
               }
-//            ec_slave[j+1].outputs = (uint8 *)&driver_command;
-          }
-        break;
-      }
-    default:
-      {
-        ANYDriveRPDOA* driver_command;
-        for(int j = 0;j<ec_slavecount;j++)
-          {
-            driver_command = (struct ANYDriveRPDOA*)ec_slave[j+1].outputs;
-            switch (joint_control_methods_[j])
-            {
-              case EFFORT:
-                {
-                  const double effort = e_stop_active_ ? 0 : joint_effort_command_[j];
-                  exchage4bytes_.floatdata = effort;
-                  ROS_INFO("recieved joint '%d' torque command%f\n", j, effort);
-                  driver_command->desired_joint_torque = exchage4bytes_.int32data;
+            default:
+              {
+                ANYDriveRPDOA* driver_command;
+                //        for(int j = 0;j<ec_slavecount;j++)
+                //          {
+                driver_command = (struct ANYDriveRPDOA*)ec_slave[i+1].outputs;
+                switch (joint_control_methods_[j])
+                  {
+                  case EFFORT:
+                    {
+                      const double effort = e_stop_active_ ? 0 : joint_effort_command_[j];
+                      exchage4bytes_.floatdata = effort;
+                      ROS_INFO("recieved joint '%d' torque command%f\n", j, effort);
+                      driver_command->desired_joint_torque = exchage4bytes_.int32data;
+                      break;
+                    }
+                  case POSITION:
+                    {
+                      exchage8bytes_.doubledata = joint_position_command_[j];
+                      driver_command->desired_position = exchage8bytes_.int64data;
+                      //          ROS_INFO("recieved joint '%d' position command%f\n", j, joint_position_command_[j]);
+                      break;
+                    }
+                  case VELOCITY:
+                    {
+                      const double vel = e_stop_active_ ? 0 : joint_velocity_command_[j];
+                      exchage4bytes_.floatdata = vel;
+                      driver_command->desired_velocity = exchage4bytes_.int32data;
+                      break;
+                    }
+                  }
+                //            ec_slave[j+1].outputs = (uint8 *)&driver_command;
+                //          }
                 break;
-                }
-              case POSITION:
-                {
-                  exchage8bytes_.doubledata = joint_position_command_[j];
-                  driver_command->desired_position = exchage8bytes_.int64data;
-        //          ROS_INFO("recieved joint '%d' position command%f\n", j, joint_position_command_[j]);
-                  break;
-                }
-              case VELOCITY:
-                {
-                  const double vel = e_stop_active_ ? 0 : joint_velocity_command_[j];
-                  exchage4bytes_.floatdata = vel;
-                  driver_command->desired_velocity = exchage4bytes_.int32data;
-                  break;
-                }
               }
-//            ec_slave[j+1].outputs = (uint8 *)&driver_command;
-          }
-        break;
-      }
+            }
+          continue;
+        }
+      if(slaves_type_[i] == SlaveType::GOLDENTWITTER)
+        {
+          ROS_INFO("Write to Twitter");
+          int j = i - junction_count;
+          switch (GoldenTwitterRPDOType_) {
+            case PDOTYPE::RPDO_F:
+              {
+                GoldenTwitterRPDOF* driver_command;
+                //        for(int j = 0;j<ec_slavecount;j++)
+                //          {
+                driver_command = (struct GoldenTwitterRPDOF*)ec_slave[i+1].outputs;
+                switch (joint_control_methods_[j])
+                  {
+                  case EFFORT:
+                    {
+                      const double effort = e_stop_active_ ? 0 : joint_effort_command_[j];
+                      double command = effort;
+                      ROS_INFO("recieved joint '%d' torque command%f\n", j, effort);
+                      int16 motor_torque = int16(200*command/TWITTER_GEAR_RATIO);
+                      driver_command->target_torque = motor_torque;//exchage4bytes_.int32data;
+                      driver_command->max_torque = 50000;
+                      ROS_INFO("send torque in motor : %d", motor_torque);
+                      break;
+                    }
+                  case POSITION:
+                    {
+                      GoldenTwitterTPDOF* driver_feedback;
+                      driver_feedback = (struct GoldenTwitterTPDOF*)ec_slave[i +1].inputs;
+                      if(driver_feedback->status_word >> 12 == 1)
+                        {
+                          ROS_INFO("set point is not available");
+                          driver_command->control_word = 47;
+                        }else if (driver_feedback->status_word >>12 == 0) {
+                          ROS_INFO("set point is available");
+                          driver_command->control_word = 63;
+                        }
+
+                      double command = joint_position_command_[j];
+                      int32 command_cnts = int32(TWITTER_GEAR_RATIO * TWITTER_ENCODER_RES * command/(2 * M_PI));
+                      ROS_INFO("send position in motor cnts is : %d",command_cnts);
+                      driver_command->target_position = command_cnts;
+                      driver_command->max_torque = 50000;
+                      ROS_INFO("recieved joint '%d' position command%f\n", j, joint_position_command_[j]);
+                      break;
+                    }
+                  case VELOCITY:
+                    {
+                      const double vel = e_stop_active_ ? 0 : joint_velocity_command_[j];
+                      int32 vel_cnts = TWITTER_GEAR_RATIO * TWITTER_ENCODER_RES * vel * 2 * M_PI/60;
+                      driver_command->target_velocity = vel_cnts;//exchage4bytes_.int32data;
+                      driver_command->max_torque = 50000;
+                      ROS_INFO("send velocity in motor cnts is : %d",vel_cnts);
+                      ROS_INFO("recieved joint '%d' velocity command%f\n", j, joint_velocity_command_[j]);
+                      break;
+                    }
+                  }
+                //            ec_slave[j+1].outputs = (uint8 *)&driver_command;
+                //          }
+                break;
+              }
+            default:
+              {
+                GoldenTwitterRPDOF* driver_command;
+                //        for(int j = 0;j<ec_slavecount;j++)
+                //          {
+                driver_command = (struct GoldenTwitterRPDOF*)ec_slave[i+1].outputs;
+                switch (joint_control_methods_[j])
+                  {
+                  case EFFORT:
+                    {
+                      const double effort = e_stop_active_ ? 0 : joint_effort_command_[j];
+                      exchage4bytes_.floatdata = effort;
+                      ROS_INFO("recieved joint '%d' torque command%f\n", j, effort);
+                      driver_command->target_torque = exchage4bytes_.int32data;
+                      break;
+                    }
+                  case POSITION:
+                    {
+                      exchage8bytes_.doubledata = joint_position_command_[j];
+                      driver_command->target_position = exchage8bytes_.int64data;
+                      //          ROS_INFO("recieved joint '%d' position command%f\n", j, joint_position_command_[j]);
+                      break;
+                    }
+                  case VELOCITY:
+                    {
+                      const double vel = e_stop_active_ ? 0 : joint_velocity_command_[j];
+                      exchage4bytes_.floatdata = vel;
+                      driver_command->target_velocity = exchage4bytes_.int32data;
+                      break;
+                    }
+                  }
+                //            ec_slave[j+1].outputs = (uint8 *)&driver_command;
+                //          }
+                break;
+              }
+            }
+          continue;
+        }
+      junction_count++;
 
     }
   lock.unlock();
@@ -1265,10 +2149,11 @@ uint16 RobotStateEtherCATHardwareInterface::getSlaveAddress(int index)
 }
 char* RobotStateEtherCATHardwareInterface::getSlaveStatus(int index, const std::string& name)
 {
-  if(name == "ANYdrive")
+  SlaveType type = slaves_type_[index];
+  if(type == SlaveType::ANYDRIVE)
     {
-      switch (TPDOType_) {
-        case ANYDrivePDOTYPE::TPDO_A:
+      switch (ANYdriveTPDOType_) {
+        case PDOTYPE::TPDO_A:
           {
             ANYDriveTPDOA* driver_feedback;
             driver_feedback = (struct ANYDriveTPDOA*)ec_slave[index+1].inputs;
@@ -1332,18 +2217,71 @@ char* RobotStateEtherCATHardwareInterface::getSlaveStatus(int index, const std::
 //          return (char*)"N/A";
         }
     }
-  if(name == "Golden")
+  if(type == SlaveType::GOLDENTWITTER)
     {
+      switch (GoldenTwitterTPDOType_) {
+        case PDOTYPE::TPDO_F:
+          {
+            GoldenTwitterTPDOF* driver_feedback;
+            driver_feedback = (struct GoldenTwitterTPDOF*)ec_slave[index+1].inputs;
+            switch ((driver_feedback->status_word & 0b01101111)) {
+              case GoldenTwitterState::NOT_READY_TO_SWITCH_ON:
+                return (char*)"Not Ready";
+              case GoldenTwitterState::SWITCH_ON_DISABLED:
+                return (char*)"Switch On Disabled";
+              case GoldenTwitterState::READY_TO_SWITCH_ON:
+                return (char*)"Ready To Switch On";
+              case GoldenTwitterState::SWITCHED_ON:
+                return (char*)"Switched On";
+              case GoldenTwitterState::OP_ENABLED:
+                return (char*)"Enable Operation";
+              case GoldenTwitterState::QUICK_STOP_ACTIVED:
+                return (char*)"Quick Stopped";
+              case GoldenTwitterState::FAULT:
+                return (char*)"Fault";
+              default:
+                return (char*)"N/A";
 
+            }
+            break;
+          }
+        default:
+          {
+            GoldenTwitterTPDOF* driver_feedback;
+            driver_feedback = (struct GoldenTwitterTPDOF*)ec_slave[index+1].inputs;
+            switch ((driver_feedback->status_word & 0b01101111)) {
+              case GoldenTwitterState::NOT_READY_TO_SWITCH_ON:
+                return (char*)"Not Ready";
+              case GoldenTwitterState::SWITCH_ON_DISABLED:
+                return (char*)"Switch On Disabled";
+              case GoldenTwitterState::READY_TO_SWITCH_ON:
+                return (char*)"Ready To Switch On";
+              case GoldenTwitterState::SWITCHED_ON:
+                return (char*)"Switched On";
+              case GoldenTwitterState::OP_ENABLED:
+                return (char*)"Enable Operation";
+              case GoldenTwitterState::QUICK_STOP_ACTIVED:
+                return (char*)"Quick Stopped";
+              case GoldenTwitterState::FAULT:
+                return (char*)"Fault";
+              default:
+                return (char*)"N/A";
+
+            }
+            break;
+          }
+        }
     }
+  return (char*)"N/A";
 }
 
 char* RobotStateEtherCATHardwareInterface::getSlaveMode(int index, const std::string& name)
 {
-  if(name == "ANYdrive")
+  SlaveType type = slaves_type_[index];
+  if(type == SlaveType::ANYDRIVE)
     {
-      switch (TPDOType_) {
-        case ANYDrivePDOTYPE::TPDO_A:
+      switch (ANYdriveTPDOType_) {
+        case PDOTYPE::TPDO_A:
           {
             ANYDriveTPDOA* driver_feedback;
             driver_feedback = (struct ANYDriveTPDOA*)ec_slave[index+1].inputs;
@@ -1388,41 +2326,134 @@ char* RobotStateEtherCATHardwareInterface::getSlaveMode(int index, const std::st
 
       }
     }
-  if(name == "Golden")
+  if(type == SlaveType::GOLDENTWITTER)
     {
+      switch (GoldenTwitterTPDOType_) {
+        case PDOTYPE::TPDO_F:
+          {
+            GoldenTwitterTPDOF* driver_feedback;
+            driver_feedback = (struct GoldenTwitterTPDOF*)ec_slave[index+1].inputs;
 
+            switch (driver_feedback->mode_of_opreration) {
+              case GoldenTwitterModeOfOperation::PROFILE_POSITION:
+                return (char*)"Profile Position";
+              case GoldenTwitterModeOfOperation::PROFILE_VELOCITY:
+                return (char*)"Profile Velocity";
+              case GoldenTwitterModeOfOperation::PROFILE_TORQUE:
+                return (char*)"Profiled Torque";
+              case GoldenTwitterModeOfOperation::HOMING:
+                return (char*)"Homing";
+              case GoldenTwitterModeOfOperation::SYNC_POSITION:
+                return (char*)"Synchronous Position";
+              case GoldenTwitterModeOfOperation::SYNC_VELOCITY:
+                return (char*)"Synchronous Velocity";
+              case GoldenTwitterModeOfOperation::SYNC_TORQUE:
+                return (char*)"Synchronous Torque";
+              default:
+                return (char*)"N/A";
+              }
+            break;
+          }
+        default:
+          {
+            GoldenTwitterTPDOF* driver_feedback;
+            driver_feedback = (struct GoldenTwitterTPDOF*)ec_slave[index+1].inputs;
+
+            switch (driver_feedback->mode_of_opreration) {
+              case GoldenTwitterModeOfOperation::PROFILE_POSITION:
+                return (char*)"Profile Position";
+              case GoldenTwitterModeOfOperation::PROFILE_VELOCITY:
+                return (char*)"Profile Velocity";
+              case GoldenTwitterModeOfOperation::PROFILE_TORQUE:
+                return (char*)"Profiled Torque";
+              case GoldenTwitterModeOfOperation::HOMING:
+                return (char*)"Homing";
+              case GoldenTwitterModeOfOperation::SYNC_POSITION:
+                return (char*)"Synchronous Position";
+              case GoldenTwitterModeOfOperation::SYNC_VELOCITY:
+                return (char*)"Synchronous Velocity";
+              case GoldenTwitterModeOfOperation::SYNC_TORQUE:
+                return (char*)"Synchronous Torque";
+              default:
+                return (char*)"N/A";
+              }
+            break;
+          }
+
+      }
     }
+  return (char*)"N/A";
 }
 
 Eigen::Vector3d RobotStateEtherCATHardwareInterface::getJointFeedback(int index, const std::string& name)
 {
   Eigen::Vector3d joint_state;
-  switch (TPDOType_) {
-    case ANYDrivePDOTYPE::TPDO_A:
-      {
-        ANYDriveTPDOA* driver_feedback;
-        driver_feedback = (struct ANYDriveTPDOA*)ec_slave[index+1].inputs;
-        exchage8bytes_.int64data = driver_feedback->joint_position;
-        joint_state(0) = exchage8bytes_.doubledata;
-        exchage4bytes_.int32data = driver_feedback->joint_velocity;
-        joint_state(1) = exchage4bytes_.floatdata;
-        exchage4bytes_.int32data = driver_feedback->joint_torque;
-        joint_state(2) = exchage4bytes_.floatdata;
-        break;
-      }
-    default:
-      {
-        ANYDriveTPDOA* driver_feedback;
-        driver_feedback = (struct ANYDriveTPDOA*)ec_slave[index+1].inputs;
-        exchage8bytes_.int64data = driver_feedback->joint_position;
-        joint_state(0) = exchage8bytes_.doubledata;
-        exchage4bytes_.int32data = driver_feedback->joint_velocity;
-        joint_state(1) = exchage4bytes_.floatdata;
-        exchage4bytes_.int32data = driver_feedback->joint_torque;
-        joint_state(2) = exchage4bytes_.floatdata;
-        break;
-      }
+  SlaveType type = slaves_type_[index];
+  if(type == SlaveType::ANYDRIVE)
+    {
+      switch (ANYdriveTPDOType_) {
+        case PDOTYPE::TPDO_A:
+          {
+            ANYDriveTPDOA* driver_feedback;
+            driver_feedback = (struct ANYDriveTPDOA*)ec_slave[index+1].inputs;
+            exchage8bytes_.int64data = driver_feedback->joint_position;
+            joint_state(0) = exchage8bytes_.doubledata;
+            exchage4bytes_.int32data = driver_feedback->joint_velocity;
+            joint_state(1) = exchage4bytes_.floatdata;
+            exchage4bytes_.int32data = driver_feedback->joint_torque;
+            joint_state(2) = exchage4bytes_.floatdata;
+            break;
+          }
+        default:
+          {
+            ANYDriveTPDOA* driver_feedback;
+            driver_feedback = (struct ANYDriveTPDOA*)ec_slave[index+1].inputs;
+            exchage8bytes_.int64data = driver_feedback->joint_position;
+            joint_state(0) = exchage8bytes_.doubledata;
+            exchage4bytes_.int32data = driver_feedback->joint_velocity;
+            joint_state(1) = exchage4bytes_.floatdata;
+            exchage4bytes_.int32data = driver_feedback->joint_torque;
+            joint_state(2) = exchage4bytes_.floatdata;
+            break;
+          }
 
+        }
+    }
+  if(type == SlaveType::GOLDENTWITTER)
+    {
+      switch (GoldenTwitterTPDOType_) {
+        case PDOTYPE::TPDO_F:
+          {
+            GoldenTwitterTPDOF* driver_feedback;
+            driver_feedback = (struct GoldenTwitterTPDOF*)ec_slave[index+1].inputs;
+            // in rad
+            joint_state(0) = 2 * M_PI * driver_feedback->motor_position/(TWITTER_ENCODER_RES*TWITTER_GEAR_RATIO);
+            // rpm on load
+            joint_state(1) = 60.0 * driver_feedback->motor_velocity/(TWITTER_ENCODER_RES*TWITTER_GEAR_RATIO*2*M_PI);
+            // percent of max torque
+            /****************
+* TODO(Shunyao) : calibrate the torque and frictions
+****************/
+            joint_state(2) = driver_feedback->motor_torque/10.0;
+            break;
+          }
+        default:
+          {
+            GoldenTwitterTPDOF* driver_feedback;
+            driver_feedback = (struct GoldenTwitterTPDOF*)ec_slave[index+1].inputs;
+            // in rad
+            joint_state(0) = 2 * M_PI * driver_feedback->motor_position/(TWITTER_ENCODER_RES*TWITTER_GEAR_RATIO);
+            // rpm on load
+            joint_state(1) = 60.0 * driver_feedback->motor_velocity/(TWITTER_ENCODER_RES*TWITTER_GEAR_RATIO*2*M_PI);
+            // percent of max torque
+            /****************
+* TODO(Shunyao) : calibrate the torque and frictions
+****************/
+            joint_state(2) = driver_feedback->motor_torque/10.0;
+            break;
+          }
+
+        }
     }
 //  exchage8bytes_.int64data = feedbacks_[index]->joint_position;
 //  joint_state(0) = exchage8bytes_.doubledata;

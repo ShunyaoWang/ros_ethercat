@@ -155,6 +155,7 @@ include_directories(
 ## The recommended prefix ensures that target names across packages don't collide
 # add_executable(${PROJECT_NAME}_node src/ros_ethercat_driver_node.cpp)
 add_executable(anydrive_test_node test/anydrive_test.cpp)
+add_executable(goldentwittertest_node test/goldentwittertest.cpp)
 add_executable(hardware_interface_test test/hardware_interface_test.cpp)
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -170,6 +171,11 @@ add_executable(hardware_interface_test test/hardware_interface_test.cpp)
 target_link_libraries(anydrive_test_node
    ${catkin_LIBRARIES}
  )
+
+target_link_libraries(goldentwittertest_node
+   ${catkin_LIBRARIES}
+ )
+
 target_link_libraries(hardware_interface_test
    ${catkin_LIBRARIES}
    ros_ethercat_hardware_interface

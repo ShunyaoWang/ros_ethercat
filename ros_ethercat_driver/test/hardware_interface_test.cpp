@@ -1,5 +1,4 @@
 #include "ros_ethercat_driver/hardware_interface/ros_ethercat_hardware_interface.hpp"
-
 int main(int argc, char *argv[])
 {
   ros::init(argc, argv, "hardware_test");

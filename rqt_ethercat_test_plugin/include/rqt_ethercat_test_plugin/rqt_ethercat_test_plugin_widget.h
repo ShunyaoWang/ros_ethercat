@@ -24,11 +24,7 @@ public:
   ~rqt_ethercat_test_plugin_widget();
 private slots:
 
-  void on_Mode_activated(int index);
-
   void on_info_display_customContextMenuRequested(const QPoint &pos);
-
-  void on_Mode_activated(const QString &arg1);
 
   void on_connect_clicked();
 
@@ -39,6 +35,12 @@ private slots:
   void on_send_clicked();
 
   void on_stop_clicked();
+
+  void on_readSDO_clicked();
+
+  void on_writeSDO_clicked();
+
+  void on_mode_of_operation_currentIndexChanged(const QString &arg1);
 
 private:
   Ui::rqt_ethercat_test_plugin_widget *ui;

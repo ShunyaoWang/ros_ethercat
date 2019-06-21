@@ -38,15 +38,35 @@
 
 // slaves
 #include "ros_ethercat_driver/slave_info/ANYDrive.hpp"
+#include "ros_ethercat_driver/slave_info/goldentwitter.hpp"
 
-#include "ros_ethercat_driver/anydrive_test.h"
+//#include "ros_ethercat_driver/anydrive_test.h"
 //free_gait
 //#include "free_gait_msgs/RobotState.h"
 
 #include "eigen3/Eigen/Eigen"
 #include "unordered_map"
 
+#define EC_TIMEOUTMON 500
+
 namespace ros_ethercat_driver {
+
+  typedef enum PDOTYPE{
+    RPDO_A = 0x16000001,
+    TPDO_A = 0x1A000001,
+    RPDO_B = 0x16010001,
+    TPDO_B = 0x1A010001,
+    RPDO_C = 0x16020001,
+    TPDO_C = 0x1A020001,
+    RPDO_D = 0x16030001,
+    TPDO_D = 0x1A030001,
+    RPDO_E = 0x16040001,
+    TPDO_E = 0x1A040001,
+    RPDO_F = 0x16050001,
+    TPDO_F = 0x1A050001,
+    RPDO_G = 0x16060001,
+    TPDO_G = 0x1A060001,
+  }PDOTYPE;
 
   typedef union {
     int32_t int32data;
@@ -60,13 +80,13 @@ namespace ros_ethercat_driver {
     double doubledata;
   }Bytes8Exchage;
 
-  typedef enum {ANYDRIVE, ELMOGOLDEN} SlaveType;
+  typedef enum {ANYDRIVE, GOLDENTWITTER, JUNCTION} SlaveType;
 
 class RobotStateEtherCATHardwareInterface : public hardware_interface::RobotHW//, public hardware_interface::HardwareInterface
 {
 
-//  typedef std::unordered_map<ANYDrivePDOTYPE, struct ANYDriveRPDOA*> RPDO_Types;
-//  typedef std::unordered_map<ANYDrivePDOTYPE, struct ANYDriveTPDOA*> TPDO_Types;
+//  typedef std::unordered_map<PDOTYPE, struct ANYDriveRPDOA*> RPDO_Types;
+//  typedef std::unordered_map<PDOTYPE, struct ANYDriveTPDOA*> TPDO_Types;
 public:
   RobotStateEtherCATHardwareInterface();
   ~RobotStateEtherCATHardwareInterface();
@@ -81,13 +101,14 @@ public:
   bool EtherCATInit();
   void EtherCATLoop();
   void EtherCATLoop(const ros::TimerEvent&);
-  bool InitSlaves(SlaveType slave_type);
-  bool DeInitSlaves(SlaveType slave_type);
+  bool InitSlaves(const std::vector<SlaveType>& slave_type);
+  bool DeInitSlaves(const std::vector<SlaveType>& slave_type);
 
   void EtherCATTimerThread();
   void shutdown();
 
   bool createEtherCATLoopThread();
+  bool createEtherCATCheckThread();
 
   char* getSlaveName(int index);
   char* getSlaveECState(int index);
@@ -102,6 +123,11 @@ public:
   bool setSlaveCW(int id, const std::string& name, const std::string& control_word);
 
   bool setCommand(int id, const std::string& mode_of_operation, double command);
+  bool setModeOfOperation(int id, const std::string& mode_of_operation);
+  bool setControlMethod(const std::string& method);
+
+  bool writeSDO(uint16 id, uint16 index, uint8 sub_index, void *value, int size);
+  bool readSDO(uint16 id, uint16 index, uint8 sub_index, char* result);
 
 //  void readJoints();
 //  void writeJoints();
@@ -124,7 +150,7 @@ protected:
   Bytes8Exchage exchage8bytes_;
 
   // Methods used to control a joint.
-  enum ControlMethod {EFFORT, POSITION, POSITION_PID, VELOCITY, VELOCITY_PID, STANCE_LEG};
+  enum ControlMethod {EFFORT, POSITION, POSITION_PID, VELOCITY, VELOCITY_PID, STANCE_LEG, FREEZE};
 
   // Register the limits of the joint specified by joint_name and joint_handle. The limits are
   // retrieved from joint_limit_nh. If urdf_model is not NULL, limits are retrieved from it also.
@@ -269,7 +295,14 @@ private:
 ////      NULL                // .EOEhook()
 //  };
 
+  int expectedWKC;
+  boolean needlf;
+  volatile int wkc;
+  boolean inOP;
+  uint8 currentgroup = 0;
 
+  boost::thread EtherCATCheckThread_;
+  void EtherCATCheck();
 
   //! WSHY: read and write data struct
 //  struct ANYDriveTPDOA *feedback;
@@ -282,7 +315,11 @@ private:
 
   std::vector<uint8 *> all_type_feedbacks;
 
-  ANYDrivePDOTYPE TPDOType_, RPDOType_;
+  PDOTYPE ANYdriveTPDOType_, ANYdriveRPDOType_;
+  PDOTYPE GoldenTwitterTPDOType_, GoldenTwitterRPDOType_;
+  std::vector<SlaveType> slaves_type_;
+
+  int motor_slave_num_;
 
 };
 

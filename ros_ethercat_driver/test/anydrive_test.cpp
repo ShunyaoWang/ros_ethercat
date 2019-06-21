@@ -98,6 +98,17 @@ typedef union {
   float floatdata;
 }Bytes4Exchage;
 
+typedef enum PDOTYPE{
+  RPDO_A = 0x16000001,
+  TPDO_A = 0x1A000001,
+  RPDO_B = 0x16010001,
+  TPDO_B = 0x1A010001,
+  RPDO_C = 0x16020001,
+  TPDO_C = 0x1A020001,
+  RPDO_D = 0x16030001,
+  TPDO_D = 0x1A030001,
+}PDOTYPE;
+
 float convert_uint32_to_float(uint32_t *src) {
   float dest;
   memcpy(&dest, src, sizeof(float));
@@ -147,9 +158,9 @@ void anydriveTest(char *ifname)
              printf("Slave %d has CA? %s\n", i, ec_slave[i].CoEdetails & ECT_COEDET_SDOCA ? "true":"false" );
 
              int32 ob2;int os;
-             os=sizeof(ob2); ob2 = ANYDrivePDOTYPE::RPDO_A;// 0x16030001;
+             os=sizeof(ob2); ob2 = PDOTYPE::RPDO_A;// 0x16030001;
              ecx_SDOwrite(&ecx_context, i, 0x1c12, 0, TRUE, os, &ob2, EC_TIMEOUTRXM);
-             os=sizeof(ob2); ob2 = ANYDrivePDOTYPE::TPDO_A;//0x1a030001;
+             os=sizeof(ob2); ob2 = PDOTYPE::TPDO_A;//0x1a030001;
              ecx_SDOwrite(&ecx_context, i, 0x1c13, 0, TRUE, os, &ob2, EC_TIMEOUTRXM);
            }
 

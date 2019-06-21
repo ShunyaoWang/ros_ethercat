@@ -6,22 +6,22 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>743</width>
-    <height>350</height>
+    <width>785</width>
+    <height>391</height>
    </rect>
   </property>
   <property name="windowTitle">
    <string>Form</string>
   </property>
   <layout class="QGridLayout" name="gridLayout">
-   <item row="0" column="0" colspan="3">
+   <item row="0" column="0" colspan="2">
     <widget class="QLabel" name="label">
      <property name="text">
       <string>EtherCAT Motor Test</string>
      </property>
     </widget>
    </item>
-   <item row="1" column="0" colspan="8">
+   <item row="1" column="0" colspan="10">
     <widget class="Line" name="line">
      <property name="orientation">
       <enum>Qt::Horizontal</enum>
@@ -69,7 +69,7 @@
      </column>
     </widget>
    </item>
-   <item row="3" column="6">
+   <item row="3" column="5" colspan="3">
     <widget class="QComboBox" name="control_word">
      <item>
       <property name="text">
@@ -118,63 +118,20 @@
      </item>
     </widget>
    </item>
-   <item row="3" column="7">
+   <item row="3" column="8">
     <widget class="QPushButton" name="set_mode">
      <property name="whatsThis">
       <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;br/&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
      </property>
      <property name="styleSheet">
-      <string notr="true">image: url(:/icons/16x16/done.svg);</string>
+      <string notr="true"/>
      </property>
      <property name="text">
       <string>Set</string>
      </property>
     </widget>
    </item>
-   <item row="4" column="5">
-    <widget class="QLabel" name="label_4">
-     <property name="text">
-      <string>Mode</string>
-     </property>
-    </widget>
-   </item>
-   <item row="4" column="6">
-    <widget class="QComboBox" name="mode_of_operation">
-     <item>
-      <property name="text">
-       <string>Position</string>
-      </property>
-     </item>
-     <item>
-      <property name="text">
-       <string>Velocity</string>
-      </property>
-     </item>
-     <item>
-      <property name="text">
-       <string>Torque</string>
-      </property>
-     </item>
-     <item>
-      <property name="text">
-       <string>Freeze</string>
-      </property>
-     </item>
-     <item>
-      <property name="text">
-       <string>Disable</string>
-      </property>
-     </item>
-    </widget>
-   </item>
-   <item row="5" column="6">
-    <widget class="QLabel" name="label_2">
-     <property name="text">
-      <string>Actual</string>
-     </property>
-    </widget>
-   </item>
-   <item row="5" column="7">
+   <item row="5" column="8">
     <widget class="QLabel" name="label_3">
      <property name="text">
       <string>Command</string>
@@ -184,32 +141,59 @@
    <item row="6" column="5">
     <widget class="QLabel" name="label_5">
      <property name="text">
-      <string>Position</string>
+      <string>Position(rad)</string>
      </property>
     </widget>
    </item>
-   <item row="6" column="7">
-    <widget class="QDoubleSpinBox" name="desired_position"/>
+   <item row="6" column="8">
+    <widget class="QDoubleSpinBox" name="desired_position">
+     <property name="minimum">
+      <double>-100.000000000000000</double>
+     </property>
+     <property name="singleStep">
+      <double>0.100000000000000</double>
+     </property>
+    </widget>
    </item>
    <item row="7" column="5">
     <widget class="QLabel" name="label_6">
      <property name="text">
-      <string>Velocity</string>
+      <string>Velocity(rad/s)</string>
      </property>
     </widget>
    </item>
-   <item row="7" column="7">
-    <widget class="QDoubleSpinBox" name="desired_velocity"/>
+   <item row="7" column="8">
+    <widget class="QDoubleSpinBox" name="desired_velocity">
+     <property name="minimum">
+      <double>-160.000000000000000</double>
+     </property>
+     <property name="maximum">
+      <double>160.000000000000000</double>
+     </property>
+     <property name="singleStep">
+      <double>0.100000000000000</double>
+     </property>
+    </widget>
    </item>
    <item row="8" column="5">
     <widget class="QLabel" name="label_7">
      <property name="text">
-      <string>Torque</string>
+      <string>Torque(Nm)</string>
      </property>
     </widget>
    </item>
-   <item row="8" column="7">
-    <widget class="QDoubleSpinBox" name="desired_torque"/>
+   <item row="8" column="8">
+    <widget class="QDoubleSpinBox" name="desired_torque">
+     <property name="minimum">
+      <double>-100.000000000000000</double>
+     </property>
+     <property name="maximum">
+      <double>100.000000000000000</double>
+     </property>
+     <property name="singleStep">
+      <double>0.100000000000000</double>
+     </property>
+    </widget>
    </item>
    <item row="9" column="0">
     <widget class="QComboBox" name="ethernet_port">
@@ -221,7 +205,11 @@
     </widget>
    </item>
    <item row="9" column="1">
-    <widget class="QLineEdit" name="ethernet_port_input"/>
+    <widget class="QLineEdit" name="ethernet_port_input">
+     <property name="text">
+      <string>eno1</string>
+     </property>
+    </widget>
    </item>
    <item row="9" column="2">
     <widget class="QComboBox" name="pdo_type">
@@ -261,42 +249,194 @@
      </property>
     </widget>
    </item>
-   <item row="9" column="6">
+   <item row="9" column="6" colspan="2">
     <widget class="QPushButton" name="send">
      <property name="text">
       <string>Send</string>
      </property>
     </widget>
    </item>
-   <item row="9" column="7">
+   <item row="9" column="8">
     <widget class="QPushButton" name="stop">
      <property name="text">
       <string>Stop</string>
      </property>
     </widget>
    </item>
-   <item row="10" column="0" colspan="8">
+   <item row="10" column="0" rowspan="4" colspan="5">
     <widget class="QTextBrowser" name="info_display"/>
    </item>
-   <item row="6" column="6">
+   <item row="10" column="8">
+    <widget class="QLabel" name="label_10">
+     <property name="text">
+      <string>Result</string>
+     </property>
+    </widget>
+   </item>
+   <item row="11" column="5">
+    <widget class="QLabel" name="label_8">
+     <property name="text">
+      <string>Index</string>
+     </property>
+    </widget>
+   </item>
+   <item row="11" column="6" colspan="2">
+    <widget class="QLineEdit" name="CoEIndex"/>
+   </item>
+   <item row="11" column="8" colspan="2">
+    <widget class="QLineEdit" name="SDOResult"/>
+   </item>
+   <item row="12" column="5">
+    <widget class="QLabel" name="label_9">
+     <property name="text">
+      <string>Subindex</string>
+     </property>
+    </widget>
+   </item>
+   <item row="12" column="6" colspan="2">
+    <widget class="QLineEdit" name="CoESubIndex">
+     <property name="maximumSize">
+      <size>
+       <width>150</width>
+       <height>16777215</height>
+      </size>
+     </property>
+    </widget>
+   </item>
+   <item row="12" column="8">
+    <widget class="QComboBox" name="SDOType">
+     <item>
+      <property name="text">
+       <string>INT8</string>
+      </property>
+     </item>
+     <item>
+      <property name="text">
+       <string>INT16</string>
+      </property>
+     </item>
+     <item>
+      <property name="text">
+       <string>INT32</string>
+      </property>
+     </item>
+     <item>
+      <property name="text">
+       <string>UINT8</string>
+      </property>
+     </item>
+     <item>
+      <property name="text">
+       <string>UINT16</string>
+      </property>
+     </item>
+     <item>
+      <property name="text">
+       <string>UINT32</string>
+      </property>
+     </item>
+     <item>
+      <property name="text">
+       <string>STRING</string>
+      </property>
+     </item>
+    </widget>
+   </item>
+   <item row="12" column="9">
+    <widget class="QComboBox" name="number_system">
+     <item>
+      <property name="text">
+       <string>Binary</string>
+      </property>
+     </item>
+     <item>
+      <property name="text">
+       <string>Hex</string>
+      </property>
+     </item>
+     <item>
+      <property name="text">
+       <string>Dec</string>
+      </property>
+     </item>
+    </widget>
+   </item>
+   <item row="13" column="7">
+    <widget class="QPushButton" name="writeSDO">
+     <property name="text">
+      <string>Write SDO</string>
+     </property>
+    </widget>
+   </item>
+   <item row="13" column="8">
+    <widget class="QPushButton" name="readSDO">
+     <property name="text">
+      <string>Read SDO</string>
+     </property>
+    </widget>
+   </item>
+   <item row="4" column="7">
+    <widget class="QLabel" name="label_4">
+     <property name="text">
+      <string>Mode</string>
+     </property>
+    </widget>
+   </item>
+   <item row="5" column="7">
+    <widget class="QLabel" name="label_2">
+     <property name="text">
+      <string>Actual</string>
+     </property>
+    </widget>
+   </item>
+   <item row="6" column="7">
     <widget class="QLabel" name="actual_position">
      <property name="text">
       <string>0.0</string>
      </property>
     </widget>
    </item>
-   <item row="7" column="6">
+   <item row="7" column="7">
     <widget class="QLabel" name="actual_velocity">
      <property name="text">
       <string>0.0</string>
      </property>
     </widget>
    </item>
-   <item row="8" column="6">
+   <item row="8" column="7">
     <widget class="QLabel" name="actual_torque">
      <property name="text">
       <string>0.0</string>
      </property>
+    </widget>
+   </item>
+   <item row="4" column="8">
+    <widget class="QComboBox" name="mode_of_operation">
+     <item>
+      <property name="text">
+       <string>Position</string>
+      </property>
+     </item>
+     <item>
+      <property name="text">
+       <string>Velocity</string>
+      </property>
+     </item>
+     <item>
+      <property name="text">
+       <string>Torque</string>
+      </property>
+     </item>
+     <item>
+      <property name="text">
+       <string>Freeze</string>
+      </property>
+     </item>
+     <item>
+      <property name="text">
+       <string>Disable</string>
+      </property>
+     </item>
     </widget>
    </item>
   </layout>
