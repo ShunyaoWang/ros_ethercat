@@ -4,6 +4,8 @@ A Ros EtherCAT hardware interface for ros_control based on **SOEM**
 
 
 ## Build Dependencies
+Add source
+  ![add_source](/assets/add_source.png)
 - [soem](https://github.com/mgruhler/soem)
   > `sudo apt-get install ros-kinetic-soem`
 
@@ -33,7 +35,7 @@ A Ros EtherCAT hardware interface for ros_control based on **SOEM**
   source .bashrc
   roslaunch rqt_ethercat_test_plugin ethercat_test.launch
   ```
-- There is a GUI like this  
+- There is a GUI like this
   ![rqt_ethercat_test](/assets/rqt_ethercat_test.gif)
   - Fisrt, input the Ethernet Port, for example 'eno1'.
   - Then, click button 'connect', if success, there will be a list of device in the Table.
