@@ -4,14 +4,16 @@
 
 using namespace ros_ethercat_driver;
 
-rqt_ethercat_test_plugin_widget::rqt_ethercat_test_plugin_widget(QWidget *parent) :
+rqt_ethercat_test_plugin_widget::rqt_ethercat_test_plugin_widget(ros::NodeHandle& nh, QWidget *parent) :
   QWidget(parent),
-  ui(new Ui::rqt_ethercat_test_plugin_widget)
+  ui(new Ui::rqt_ethercat_test_plugin_widget),
+  nh_(nh)
 {
   ui->setupUi(this);
 //  ui->info_display->
   ethercat_driver_ptr_.reset(new ros_ethercat_driver::RobotStateEtherCATHardwareInterface);
-//  ui->desired_position->setRange(-100, 100);
+  ethercat_driver_ptr_->loadParameters(nh_);
+  //  ui->desired_position->setRange(-100, 100);
 //  ui->desired_velocity->setRange(-100, 100);
 //  ui->desired_torque->setRange(-100, 100);
   ui->desired_position->setEnabled(true);

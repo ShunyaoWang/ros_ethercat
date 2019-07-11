@@ -14,7 +14,7 @@ namespace rqt_ethercat_test_plugin {
 
   void rqt_ethercat_test_plugin::EtherCATTestPlugin::initPlugin(qt_gui_cpp::PluginContext &context)
   {
-    widget = new rqt_ethercat_test_plugin_widget();
+    widget = new rqt_ethercat_test_plugin_widget(getNodeHandle());
     context.addWidget(widget);
   }
 

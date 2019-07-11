@@ -16,8 +16,9 @@
 #include <inttypes.h>
 #include <vector>
 
-#define TWITTER_GEAR_RATIO 18.065
+#define TWITTER_GEAR_RATIO 18.0625
 #define TWITTER_ENCODER_RES 262144
+#define TWITTER_CURRENT_TORQUE_RATIO 16.67 //1000 means max current 25[Amp]
 
 
 
@@ -32,14 +33,14 @@ typedef enum GoldenTwitterState{ //bit 0-3,5,6; result & 0b01101111
 }GoldenTwitterState;
 
 typedef enum GoldenTwitterControlWord{// bit 0-3,7, result &0b10001111
-  SHUT_DOWN             = 0b00000110,
-  SWITCH_ON             = 0b00000111,
-  SWITCH_ON_AND_ENABLE  = 0b00001111,
+  SHUT_DOWN             = 0b00000110,//6
+  SWITCH_ON             = 0b00000111,//7
+  SWITCH_ON_AND_ENABLE  = 0b00001111,//15
   QUICK_STOP            = 0b00000010,
   DISABLE_OP            = 0b00000111,
   ENABLE_OP             = 0b00001111,
   DISABLE_VOLTAGE       = 0b00000000,
-  FAULT_RESET           = 0b10000000, //upward trigger
+  FAULT_RESET           = 0b10000000, //upward trigger 128
 }GoldenTwitterControlWord;
 
 typedef enum GoldenTwitterModeOfOperation{

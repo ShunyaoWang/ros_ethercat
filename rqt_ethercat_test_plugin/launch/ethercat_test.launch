@@ -1,8 +1,9 @@
 
 <launch>
-
+<rosparam command="load" file="$(find ros_ethercat_driver)/config/motor_param.yaml" />
 <!-- Load RQT with a pre-setup GUI for Baxter controls from a perspective file  -->
 <node name="ethercat_test" pkg="rqt_gui" type="rqt_gui" respawn="false"
 output="screen" args="--perspective-file $(find rqt_ethercat_test_plugin)/scripts/ethercat_test.perspective"/>
+
 
 </launch>

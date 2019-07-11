@@ -6,6 +6,7 @@
 #include <QLabel>
 
 #include "ros/ros.h"
+#include "ros/package.h"
 #include "ros_ethercat_driver/hardware_interface/ros_ethercat_hardware_interface.hpp"
 
 #include "string"
@@ -20,7 +21,7 @@ class rqt_ethercat_test_plugin_widget : public QWidget
   Q_OBJECT
 
 public:
-  explicit rqt_ethercat_test_plugin_widget(QWidget *parent = nullptr);
+  explicit rqt_ethercat_test_plugin_widget(ros::NodeHandle& nh, QWidget *parent = nullptr);
   ~rqt_ethercat_test_plugin_widget();
 private slots:
 
@@ -44,6 +45,8 @@ private slots:
 
 private:
   Ui::rqt_ethercat_test_plugin_widget *ui;
+
+  ros::NodeHandle nh_;
 
   std::vector<QCheckBox*> motor_chooser;
 

@@ -134,6 +134,38 @@ void RobotStateEtherCATHardwareInterface::shutdown()
   ROS_WARN("EtherCAT HardWare Interface Shutdown");
 }
 
+bool RobotStateEtherCATHardwareInterface::loadParameters(ros::NodeHandle& nh)
+{
+  if(!nh.getParam("/motor_frictions/mu", motor_friction_mu))
+    {
+      ROS_ERROR("Can not load motor friction 'mu' parameters");
+      return false;
+    }
+  if(!nh.getParam("/motor_frictions/bias", motor_friction_bias))
+    {
+      ROS_ERROR("Can not load motor friction 'bias' parameters");
+      return false;
+    }
+//  for(auto out:motor_friction_mu)
+//    std::cout<<out<<std::endl;
+  std::string motor_friction_dir_str = ros::package::getPath("ros_ethercat_driver") + "/config";
+  friction_of_pos.resize(motor_friction_mu.size());
+  for(int i = 0;i<motor_friction_mu.size();i++)
+    {
+      std::ifstream data(motor_friction_dir_str + "/friction_of_pos_motor_"+std::to_string(i+1)+".txt");
+      friction_of_pos[i].resize(360);
+      for(int j = 0;j<360;j++)
+        {
+          data >> friction_of_pos[i][j];
+          friction_of_pos[i][j] += 0.0;
+          if(friction_of_pos[i][j]<0)
+            friction_of_pos[i][j]=0;
+//          std::cout<<friction_of_pos[i][j]<<std::endl;
+        }
+    }
+  return true;
+}
+
 bool RobotStateEtherCATHardwareInterface::init(ros::NodeHandle& root_nh, ros::NodeHandle& robot_hw_nh)
 {
 
@@ -146,6 +178,12 @@ bool RobotStateEtherCATHardwareInterface::init(ros::NodeHandle& root_nh, ros::No
 
   ROS_INFO("Initializing RobotStateEtherCATHardwareInterface");
   node_handle_ = root_nh;
+
+  if(!loadParameters(node_handle_))
+    {
+      ROS_ERROR("Failed to Load parameters");
+      return false;
+    }
 //  imu_data_.frame_id = "imu";
 //  imu_interface_.registerHandle(hardware_interface::ImuSensorHandle(imu_data_));
   //! WSHY: initial data of robot state
@@ -229,6 +267,8 @@ bool RobotStateEtherCATHardwareInterface::init(ros::NodeHandle& root_nh, ros::No
   joint_effort_command_.resize(n_dof_);
   joint_position_command_.resize(n_dof_);
   joint_velocity_command_.resize(n_dof_);
+
+  status_word_.resize(n_dof_);
   // Initialize values
   const ros::NodeHandle joint_limit_nh(root_nh);
 
@@ -748,11 +788,12 @@ bool RobotStateEtherCATHardwareInterface::setCommand(int id, const std::string& 
           {
             GoldenTwitterRPDOF* driver_command;
             driver_command = (struct GoldenTwitterRPDOF*)ec_slave[id+1].outputs;
+            GoldenTwitterTPDOF* driver_feedback;
+            driver_feedback = (struct GoldenTwitterTPDOF*)ec_slave[id +1].inputs;
             //! WSHY: for mode of operation
             if(mode_of_operation == "Position")
               {
-                GoldenTwitterTPDOF* driver_feedback;
-                driver_feedback = (struct GoldenTwitterTPDOF*)ec_slave[id +1].inputs;
+
                 if(driver_feedback->status_word >> 12 == 1)
                   {
                     ROS_INFO("set point is not available");
@@ -794,9 +835,21 @@ bool RobotStateEtherCATHardwareInterface::setCommand(int id, const std::string& 
               }
             else if(mode_of_operation == "Torque")
               {
+                double velocity = 60.0 * driver_feedback->motor_velocity/(TWITTER_ENCODER_RES*TWITTER_GEAR_RATIO*2*M_PI);
+                double position_in_rad = 2 * M_PI * driver_feedback->motor_position/(TWITTER_ENCODER_RES*TWITTER_GEAR_RATIO);
+                int position_in_degree = int(180*position_in_rad/M_PI);//int(360*fmod(position_in_rad,2*M_PI)/(2*M_PI));
+                position_in_degree = position_in_degree%360;
                 driver_command->mode_of_operation = GoldenTwitterModeOfOperation::SYNC_TORQUE;
-                exchage4bytes_.floatdata = (float)command;
-                int16 motor_torque = int16(200*command/TWITTER_GEAR_RATIO);
+//                exchage4bytes_.floatdata = (float)command;
+
+                int16 motor_torque = int16(command*TWITTER_CURRENT_TORQUE_RATIO);//TWITTER_GEAR_RATIO);
+                std::cout<<"id: "<<id<<std::endl;
+                ROS_INFO("Torque compensation in position %d is %f",position_in_degree, (1.0 + friction_of_pos[id-1][position_in_degree])*getMotorFrictionCompensation(id, velocity));
+
+                if(motor_torque>=0) //id-1 to consider first junction slave
+                  motor_torque = motor_torque + (1.0 + friction_of_pos[id-1][position_in_degree])*getMotorFrictionCompensation(id, velocity);
+                if(motor_torque<0)
+                  motor_torque = motor_torque + (1.0 + friction_of_pos[id-1][position_in_degree])*getMotorFrictionCompensation(id, velocity);
                 driver_command->target_torque = motor_torque;//exchage4bytes_.int32data;
                 driver_command->max_torque = 50000;
                 ROS_INFO("send torque in motor : %d", motor_torque);
@@ -1637,19 +1690,19 @@ void RobotStateEtherCATHardwareInterface::read(const ros::Time& time, const ros:
         }
       if(slaves_type_[i] == SlaveType::GOLDENTWITTER)
         {
-          ROS_INFO("Read from Twitter");
+//          ROS_INFO("Read from Twitter");
           int j = i - junction_count;
           switch (GoldenTwitterTPDOType_) {
             case PDOTYPE::TPDO_F:
               {
                 GoldenTwitterTPDOF* driver_feedback;
                 driver_feedback = (struct GoldenTwitterTPDOF*)ec_slave[i+1].inputs;
-
+                status_word_[j] = driver_feedback->status_word;
                 double position = 2 * M_PI * driver_feedback->motor_position/(TWITTER_ENCODER_RES*TWITTER_GEAR_RATIO);
                 // rpm on load
                 double velocity = 60.0 * driver_feedback->motor_velocity/(TWITTER_ENCODER_RES*TWITTER_GEAR_RATIO*2*M_PI);
                 // percent of max torque
-                double effort = driver_feedback->motor_torque/10;
+                double effort = driver_feedback->motor_torque/TWITTER_CURRENT_TORQUE_RATIO;
 
 //                double last_joint_position = joint_position_[j];
                 joint_position_[j] = position;
@@ -1842,7 +1895,7 @@ void RobotStateEtherCATHardwareInterface::write(const ros::Time& time, const ros
         }
       if(slaves_type_[i] == SlaveType::GOLDENTWITTER)
         {
-          ROS_INFO("Write to Twitter");
+//          ROS_INFO("Write to Twitter");
           int j = i - junction_count;
           switch (GoldenTwitterRPDOType_) {
             case PDOTYPE::RPDO_F:
@@ -1851,14 +1904,77 @@ void RobotStateEtherCATHardwareInterface::write(const ros::Time& time, const ros
                 //        for(int j = 0;j<ec_slavecount;j++)
                 //          {
                 driver_command = (struct GoldenTwitterRPDOF*)ec_slave[i+1].outputs;
+//                switch (driver_command->control_word) {
+//                  case 0:
+//                    driver_command->control_word = GoldenTwitterControlWord::SHUT_DOWN;
+//                    break;
+//                  case GoldenTwitterControlWord::SHUT_DOWN:
+//                    driver_command->control_word = GoldenTwitterControlWord::SWITCH_ON;
+//                    break;
+//                  case GoldenTwitterControlWord::SWITCH_ON:
+//                    driver_command->control_word = GoldenTwitterControlWord::ENABLE_OP;
+//                    break;
+//                  case GoldenTwitterControlWord::FAULT_RESET:
+//                    driver_command->control_word = 0;
+//                    break;
+//                  }
+                switch ((status_word_[j] & 0b01101111)) {
+                  case GoldenTwitterState::NOT_READY_TO_SWITCH_ON:
+                    driver_command->control_word = GoldenTwitterControlWord::SHUT_DOWN;
+                    ROS_ERROR("Driver %d is NOT READY TO SWITCH ON",j);
+                    break;
+                  case GoldenTwitterState::SWITCH_ON_DISABLED:
+                    driver_command->control_word = GoldenTwitterControlWord::SHUT_DOWN;
+                    ROS_ERROR("Driver %d is SWITCH ON DISABLED",j);
+                    break;
+                  case GoldenTwitterState::READY_TO_SWITCH_ON:
+                    driver_command->control_word = GoldenTwitterControlWord::SWITCH_ON;
+                    ROS_ERROR("Driver %d is  READY TO SWITCH ON",j);
+                    break;
+                  case GoldenTwitterState::SWITCHED_ON:
+                    driver_command->control_word = GoldenTwitterControlWord::ENABLE_OP;
+                    break;
+                  case GoldenTwitterState::OP_ENABLED:
+                    ROS_INFO("Driver %d is OP ENABLED",j);
+                    break;
+                  case GoldenTwitterState::QUICK_STOP_ACTIVED:
+                    driver_command->control_word = GoldenTwitterControlWord::SHUT_DOWN;
+                    ROS_ERROR("Driver %d is QUICK STOP ACTIVED",j);
+                    break;
+                  case GoldenTwitterState::FAULT:
+                    driver_command->control_word = GoldenTwitterControlWord::FAULT_RESET;
+                    ROS_ERROR("Driver %d is FAULT",j);
+                    break;
+                  default:
+                    ROS_ERROR("ERROR STATUS !!!!!");
+                    break;
+
+                }
                 switch (joint_control_methods_[j])
                   {
                   case EFFORT:
                     {
+                      double velocity = joint_velocity_[j];
+                      double position_in_rad = joint_position_[j];
+                      int position_in_degree = int(180*position_in_rad/M_PI);//int(360*fmod(position_in_rad,2*M_PI)/(2*M_PI));
+                      position_in_degree = position_in_degree%360;
+
                       const double effort = e_stop_active_ ? 0 : joint_effort_command_[j];
                       double command = effort;
                       ROS_INFO("recieved joint '%d' torque command%f\n", j, effort);
-                      int16 motor_torque = int16(200*command/TWITTER_GEAR_RATIO);
+                      int16 motor_torque = motor_torque = int16(command*TWITTER_CURRENT_TORQUE_RATIO);
+
+                      if(motor_torque==0) //id-1 to consider first junction slave
+                        motor_torque = motor_torque + (1.0 + friction_of_pos[j][position_in_degree])*getMotorFrictionCompensation(j+1, velocity);
+                      else if(command > 0.0)
+                        {
+                          motor_torque = motor_torque = int16(command*TWITTER_CURRENT_TORQUE_RATIO);
+                          motor_torque = motor_torque + (1.0 + friction_of_pos[j][position_in_degree])*getMotorFrictionCompensation(j+1, fabs(velocity));
+                        }
+                      else if (command < 0.0) {
+                          motor_torque = motor_torque = int16(command*TWITTER_CURRENT_TORQUE_RATIO);
+                          motor_torque = motor_torque + (1.0 + friction_of_pos[j][position_in_degree])*getMotorFrictionCompensation(j+1, -fabs(velocity));
+                        }
                       driver_command->target_torque = motor_torque;//exchage4bytes_.int32data;
                       driver_command->max_torque = 50000;
                       ROS_INFO("send torque in motor : %d", motor_torque);
@@ -1866,13 +1982,14 @@ void RobotStateEtherCATHardwareInterface::write(const ros::Time& time, const ros
                     }
                   case POSITION:
                     {
-                      GoldenTwitterTPDOF* driver_feedback;
-                      driver_feedback = (struct GoldenTwitterTPDOF*)ec_slave[i +1].inputs;
-                      if(driver_feedback->status_word >> 12 == 1)
+//                      GoldenTwitterTPDOF* driver_feedback;
+//                      driver_feedback = (struct GoldenTwitterTPDOF*)ec_slave[i +1].inputs;
+
+                      if(status_word_[j] >> 12 == 1)
                         {
                           ROS_INFO("set point is not available");
                           driver_command->control_word = 47;
-                        }else if (driver_feedback->status_word >>12 == 0) {
+                        }else if (status_word_[j] >>12 == 0) {
                           ROS_INFO("set point is available");
                           driver_command->control_word = 63;
                         }
@@ -1891,6 +2008,7 @@ void RobotStateEtherCATHardwareInterface::write(const ros::Time& time, const ros
                       int32 vel_cnts = TWITTER_GEAR_RATIO * TWITTER_ENCODER_RES * vel * 2 * M_PI/60;
                       driver_command->target_velocity = vel_cnts;//exchage4bytes_.int32data;
                       driver_command->max_torque = 50000;
+                      driver_command->control_word = GoldenTwitterControlWord::SWITCH_ON_AND_ENABLE;
                       ROS_INFO("send velocity in motor cnts is : %d",vel_cnts);
                       ROS_INFO("recieved joint '%d' velocity command%f\n", j, joint_velocity_command_[j]);
                       break;
@@ -2428,13 +2546,13 @@ Eigen::Vector3d RobotStateEtherCATHardwareInterface::getJointFeedback(int index,
             driver_feedback = (struct GoldenTwitterTPDOF*)ec_slave[index+1].inputs;
             // in rad
             joint_state(0) = 2 * M_PI * driver_feedback->motor_position/(TWITTER_ENCODER_RES*TWITTER_GEAR_RATIO);
-            // rpm on load
+            // rad/s on load
             joint_state(1) = 60.0 * driver_feedback->motor_velocity/(TWITTER_ENCODER_RES*TWITTER_GEAR_RATIO*2*M_PI);
             // percent of max torque
             /****************
 * TODO(Shunyao) : calibrate the torque and frictions
 ****************/
-            joint_state(2) = driver_feedback->motor_torque/10.0;
+            joint_state(2) = driver_feedback->motor_torque/TWITTER_CURRENT_TORQUE_RATIO;
             break;
           }
         default:
@@ -2467,6 +2585,19 @@ Eigen::Vector3d RobotStateEtherCATHardwareInterface::getJointFeedback(int index,
 int RobotStateEtherCATHardwareInterface::getNumberOfSlaves()
 {
   return ec_slavecount;
+}
+
+double RobotStateEtherCATHardwareInterface::getMotorFrictionCompensation(int index, double velocity)
+{
+  switch (index) {
+    case 1:
+      if(velocity>0)
+        return std::min(5.605 * velocity + 50.914, 100.0);
+      if(velocity<0)
+        return std::max(5.605 * velocity - 50.914, -100.0);
+    default:
+      return 50;
+    }
 }
 }
 

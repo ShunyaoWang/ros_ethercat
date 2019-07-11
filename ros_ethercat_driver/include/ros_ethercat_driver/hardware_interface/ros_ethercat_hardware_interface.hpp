@@ -47,7 +47,15 @@
 #include "eigen3/Eigen/Eigen"
 #include "unordered_map"
 
+#include <fstream>
+#include <iostream>
+
+#include<algorithm>
+#include "ros/package.h"
+
+
 #define EC_TIMEOUTMON 500
+
 
 namespace ros_ethercat_driver {
 
@@ -129,6 +137,10 @@ public:
   bool writeSDO(uint16 id, uint16 index, uint8 sub_index, void *value, int size);
   bool readSDO(uint16 id, uint16 index, uint8 sub_index, char* result);
 
+  double getMotorFrictionCompensation(int index, double velocity);
+
+  bool loadParameters(ros::NodeHandle& nh);
+
 //  void readJoints();
 //  void writeJoints();
 //  void readStates();
@@ -149,6 +161,8 @@ protected:
   Bytes4Exchage exchage4bytes_;
   Bytes8Exchage exchage8bytes_;
 
+  std::vector<double> motor_friction_mu, motor_friction_bias;
+  std::vector<std::vector<double>> friction_of_pos;
   // Methods used to control a joint.
   enum ControlMethod {EFFORT, POSITION, POSITION_PID, VELOCITY, VELOCITY_PID, STANCE_LEG, FREEZE};
 
@@ -319,6 +333,7 @@ private:
   PDOTYPE GoldenTwitterTPDOType_, GoldenTwitterRPDOType_;
   std::vector<SlaveType> slaves_type_;
 
+  std::vector<uint16_t> status_word_;
   int motor_slave_num_;
 
 };
