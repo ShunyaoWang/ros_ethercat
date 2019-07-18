@@ -161,7 +161,7 @@ protected:
   Bytes4Exchage exchage4bytes_;
   Bytes8Exchage exchage8bytes_;
 
-  std::vector<double> motor_friction_mu, motor_friction_bias;
+  std::vector<double> motor_friction_mu, motor_friction_bias, motor_zero_offsets, motor_friction_proportion;
   std::vector<std::vector<double>> friction_of_pos;
   // Methods used to control a joint.
   enum ControlMethod {EFFORT, POSITION, POSITION_PID, VELOCITY, VELOCITY_PID, STANCE_LEG, FREEZE};
