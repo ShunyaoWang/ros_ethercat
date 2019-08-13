@@ -140,6 +140,7 @@ public:
   double getMotorFrictionCompensation(int index, double velocity);
 
   bool loadParameters(ros::NodeHandle& nh);
+  bool checkPositionLimits(const int index, const double position);
 
 //  void readJoints();
 //  void writeJoints();
@@ -161,7 +162,9 @@ protected:
   Bytes4Exchage exchage4bytes_;
   Bytes8Exchage exchage8bytes_;
 
-  std::vector<double> motor_friction_mu, motor_friction_bias, motor_zero_offsets, motor_friction_proportion;
+  std::vector<double> motor_friction_mu, motor_friction_bias,
+                      motor_zero_offsets, motor_friction_proportion,
+                      motor_max_limits, motor_min_limits, motor_directions;
   std::vector<std::vector<double>> friction_of_pos;
   // Methods used to control a joint.
   enum ControlMethod {EFFORT, POSITION, POSITION_PID, VELOCITY, VELOCITY_PID, STANCE_LEG, FREEZE};
@@ -207,7 +210,7 @@ protected:
   std::vector<double> joint_lower_limits_;
   std::vector<double> joint_upper_limits_;
   std::vector<double> joint_effort_limits_;
-  std::vector<ControlMethod> joint_control_methods_;
+  std::vector<ControlMethod> joint_control_methods_, last_joint_control_methods_;
   std::vector<control_toolbox::Pid> pid_controllers_;
   std::vector<double> joint_position_;
   std::vector<double> joint_velocity_;
@@ -229,6 +232,7 @@ protected:
 
   // e_stop_active_ is true if the emergency stop is active.
   bool e_stop_active_, last_e_stop_active_;
+  std::vector<bool> motor_disabled, motor_unused;
 
   double pos_read[12], pos_write[12], vel_read[12], vel_write[12], eff_read[12],eff_write[12];
   double position[3], orinetation[4], linear_vel[3], angular_vel[3];

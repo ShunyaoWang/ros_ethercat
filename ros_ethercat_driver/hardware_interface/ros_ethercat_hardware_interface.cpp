@@ -156,8 +156,30 @@ bool RobotStateEtherCATHardwareInterface::loadParameters(ros::NodeHandle& nh)
       ROS_ERROR("Can not load motor friction 'proportion' parameters");
       return false;
     }
-//  for(auto out:motor_friction_mu)
-//    std::cout<<out<<std::endl;
+  if(!nh.getParam("/motor_limits/max", motor_max_limits))
+    {
+      ROS_ERROR("Can not load motor 'motor_limits_max' parameters");
+      return false;
+    }
+  if(!nh.getParam("/motor_limits/min", motor_min_limits))
+    {
+      ROS_ERROR("Can not load motor '/motor_limits/min' parameters");
+      return false;
+    }
+  if(!nh.getParam("/motor_unused", motor_unused))
+    {
+      ROS_ERROR("Can not load motor '/motor_unused' parameters");
+      return false;
+    }
+
+  if(!nh.getParam("/motor_direction", motor_directions))
+    {
+      ROS_ERROR("Can not load motor '/motor_direction' parameters");
+      return false;
+    }
+
+  for(auto out:motor_friction_mu)
+    std::cout<<out<<std::endl;
   std::string motor_friction_dir_str = ros::package::getPath("ros_ethercat_driver") + "/config";
   friction_of_pos.resize(motor_friction_mu.size());
   for(int i = 0;i<motor_friction_mu.size();i++)
@@ -172,6 +194,7 @@ bool RobotStateEtherCATHardwareInterface::loadParameters(ros::NodeHandle& nh)
             friction_of_pos[i][j]=0;
 //          std::cout<<friction_of_pos[i][j]<<std::endl;
         }
+      motor_disabled.push_back((bool)motor_unused[i]);
     }
   return true;
 }
@@ -270,6 +293,7 @@ bool RobotStateEtherCATHardwareInterface::init(ros::NodeHandle& root_nh, ros::No
   joint_upper_limits_.resize(n_dof_);
   joint_effort_limits_.resize(n_dof_);
   joint_control_methods_.resize(n_dof_);
+  last_joint_control_methods_.resize(n_dof_);
   pid_controllers_.resize(n_dof_);
   joint_position_.resize(n_dof_);
   joint_velocity_.resize(n_dof_);
@@ -828,7 +852,7 @@ bool RobotStateEtherCATHardwareInterface::setCommand(int id, const std::string& 
 //                    driver_command->control_word = 63;
 //                  }
                 driver_command->mode_of_operation = GoldenTwitterModeOfOperation::PROFILE_POSITION;
-                command = command + motor_zero_offsets[motor_count];
+                command = motor_directions[motor_count] * command + motor_zero_offsets[motor_count];
                 int32 command_cnts = int32(TWITTER_GEAR_RATIO * TWITTER_ENCODER_RES * command/(2 * M_PI));
                 ROS_INFO("send position in motor cnts is : %d",command_cnts);
                 driver_command->max_torque = 1000;
@@ -844,10 +868,10 @@ bool RobotStateEtherCATHardwareInterface::setCommand(int id, const std::string& 
             else if(mode_of_operation == "Velocity")
               {
                 driver_command->mode_of_operation = GoldenTwitterModeOfOperation::SYNC_VELOCITY;
-                exchage4bytes_.floatdata = (float)command;
+//                exchage4bytes_.floatdata = (float)command;
 //                int32 vel_cnts = TWITTER_GEAR_RATIO * TWITTER_ENCODER_RES * command * 2 * M_PI/60;
                 // rad/s
-                int32 vel_cnts = TWITTER_GEAR_RATIO * TWITTER_ENCODER_RES * command / (2 * M_PI);
+                int32 vel_cnts = motor_directions[motor_count] * TWITTER_GEAR_RATIO * TWITTER_ENCODER_RES * command / (2 * M_PI);
                 driver_command->max_torque = 1000;
                 driver_command->target_velocity = vel_cnts;//exchage4bytes_.int32data;
                 ROS_INFO("send velocity in motor cnts is : %d",vel_cnts);
@@ -861,14 +885,14 @@ bool RobotStateEtherCATHardwareInterface::setCommand(int id, const std::string& 
                 driver_command->mode_of_operation = GoldenTwitterModeOfOperation::SYNC_TORQUE;
 //                exchage4bytes_.floatdata = (float)command;
 
-                int16 motor_torque = int16(command*TWITTER_CURRENT_TORQUE_RATIO);//TWITTER_GEAR_RATIO);
-                std::cout<<"id: "<<id<<std::endl;
-                ROS_INFO("Torque compensation in position %d is %f",position_in_degree, (1.0 + friction_of_pos[id-1][position_in_degree])*getMotorFrictionCompensation(id, velocity));
+                int16 motor_torque = motor_directions[motor_count] * int16(command*TWITTER_CURRENT_TORQUE_RATIO);//TWITTER_GEAR_RATIO);
+                std::cout<<"motor_count: "<<motor_count<<std::endl;
+                ROS_INFO("Torque compensation in position %d is %f",position_in_degree, (1.0 + friction_of_pos[motor_count][position_in_degree])*getMotorFrictionCompensation(motor_count, velocity));
 
                 if(motor_torque>=0) //id-1 to consider first junction slave
-                  motor_torque = motor_torque + (1.0 + friction_of_pos[id-1][position_in_degree])*getMotorFrictionCompensation(id, velocity);
+                  motor_torque = motor_torque + (1.0 + friction_of_pos[motor_count][position_in_degree])*getMotorFrictionCompensation(motor_count, velocity);
                 if(motor_torque<0)
-                  motor_torque = motor_torque + (1.0 + friction_of_pos[id-1][position_in_degree])*getMotorFrictionCompensation(id, velocity);
+                  motor_torque = motor_torque + (1.0 + friction_of_pos[motor_count][position_in_degree])*getMotorFrictionCompensation(motor_count, velocity);
                 driver_command->target_torque = motor_torque;//exchage4bytes_.int32data;
                 driver_command->max_torque = 1000;
                 ROS_INFO("send torque in motor : %d", motor_torque);
@@ -1392,7 +1416,7 @@ bool RobotStateEtherCATHardwareInterface::EtherCATInit()
                u32= 10000000;
                writeSDO(i, 0x6083, 0, &u32, sizeof (u32));
                writeSDO(i, 0x6084, 0, &u32, sizeof (u32));
-               int16 i16 = 2;
+               int16 i16 = 8;
                int8 i8 = 2;
                //! WSHY: set extrapolation timeout for cyclic mode
                writeSDO(i, 0x60C2, 1, &i8, sizeof (i8));
@@ -1718,13 +1742,13 @@ void RobotStateEtherCATHardwareInterface::read(const ros::Time& time, const ros:
                 driver_feedback = (struct GoldenTwitterTPDOF*)ec_slave[i+1].inputs;
                 status_word_[j] = driver_feedback->status_word;
                 double position = 2 * M_PI * driver_feedback->motor_position/(TWITTER_ENCODER_RES*TWITTER_GEAR_RATIO);
-                position = position - motor_zero_offsets[j];
+                position = motor_directions[j]*(position - motor_zero_offsets[j]);
                 // rpm on load
 //                double velocity = 60.0 * driver_feedback->motor_velocity/(TWITTER_ENCODER_RES*TWITTER_GEAR_RATIO*2*M_PI);
                 // rad/s on load
-                double velocity = 2*M_PI * driver_feedback->motor_velocity/(TWITTER_ENCODER_RES*TWITTER_GEAR_RATIO);
+                double velocity = motor_directions[j]*(2*M_PI * driver_feedback->motor_velocity/(TWITTER_ENCODER_RES*TWITTER_GEAR_RATIO));
                 // percent of max torque
-                double effort = driver_feedback->motor_torque/TWITTER_CURRENT_TORQUE_RATIO;
+                double effort = motor_directions[j]*(driver_feedback->motor_torque/TWITTER_CURRENT_TORQUE_RATIO);
 
 //                double last_joint_position = joint_position_[j];
                 joint_position_[j] = position;
@@ -1940,11 +1964,36 @@ void RobotStateEtherCATHardwareInterface::write(const ros::Time& time, const ros
 //                    driver_command->control_word = 0;
 //                    break;
 //                  }
+//                motor_disabled[j] = (bool)motor_unused[j];
+                if(!checkPositionLimits(j, joint_position_[j])&&!((bool)motor_unused[j]))
+                  {
+                    ROS_WARN("Joint %d Position is Out Of Limit!!!",j);
+//                    std::cout<<"joint position of "<<j<<" is "<<joint_position_[j]<<std::endl;
+//                    std::cout<<"joint limits of "<<j<<" is ("<<motor_max_limits[j]<<", "<<motor_min_limits[j]<<")"<<std::endl;
+                    setCommand(i, "Velocity", 0);
+                    if(fabs(joint_velocity_[j])<1)
+                      {
+                        motor_disabled[j] = true;
+                      }
+                  }else if(motor_disabled[j]&&!((bool)motor_unused[j])){
+                    switch (joint_control_methods_[j]) {
+                      case EFFORT:
+                        setModeOfOperation(i, "Torque");
+                        break;
+                      case POSITION:
+                        setModeOfOperation(i, "Position");
+                        break;
+                      case VELOCITY:
+                        setModeOfOperation(i, "Velocity");
+                        break;
+                      }
+                  }
+                e_stop_active_ = motor_disabled[j];
                 if(e_stop_active_)
                   {
                     driver_command->control_word = GoldenTwitterControlWord::DISABLE_OP;
-                    ROS_WARN("E-stop is actived");
-                    break;
+//                    ROS_WARN("Motor %d E-stop is actived", j);
+                    continue;
                   }else{
                     switch ((status_word_[j] & 0b01101111)) {
                       case GoldenTwitterState::NOT_READY_TO_SWITCH_ON:
@@ -1985,29 +2034,32 @@ void RobotStateEtherCATHardwareInterface::write(const ros::Time& time, const ros
                   case EFFORT:
                     {
                       double velocity = joint_velocity_[j];
-                      double position_in_rad = joint_position_[j] - motor_zero_offsets[j];
-                      int position_in_degree = int(180*position_in_rad/M_PI);//int(360*fmod(position_in_rad,2*M_PI)/(2*M_PI));
-                      position_in_degree = position_in_degree%360;
+                      double position_in_rad = motor_directions[j]*joint_position_[j] + motor_zero_offsets[j];
+                      double position_in_2pi = angles::normalize_angle_positive(position_in_rad);
+                      int position_in_degree = int(180*position_in_2pi/M_PI);//int(360*fmod(position_in_rad,2*M_PI)/(2*M_PI));
+
+
+//                      position_in_degree = position_in_degree%360;
 
                       const double effort = e_stop_active_ ? 0 : joint_effort_command_[j];
-                      double command = effort;
-                      ROS_INFO("recieved joint '%d' torque command%f\n", j, effort);
-                      int16 motor_torque = motor_torque = int16(command*TWITTER_CURRENT_TORQUE_RATIO);
+                      double command = motor_directions[j]*effort;
+//                      ROS_INFO("recieved joint '%d' torque command%f\n", j, effort);
+                      int16 motor_torque = int16(command*TWITTER_CURRENT_TORQUE_RATIO);
 
                       if(motor_torque==0) //id-1 to consider first junction slave
-                        motor_torque = motor_torque + (motor_friction_proportion[j] + friction_of_pos[j][position_in_degree])*getMotorFrictionCompensation(j+1, velocity);
+                        motor_torque = motor_torque + motor_directions[j]*(motor_friction_proportion[j] + friction_of_pos[j][position_in_degree])*getMotorFrictionCompensation(j+1, velocity);
                       else if(command > 0.0)
                         {
-                          motor_torque = motor_torque = int16(command*TWITTER_CURRENT_TORQUE_RATIO);
-                          motor_torque = motor_torque + (motor_friction_proportion[j]+ friction_of_pos[j][position_in_degree])*getMotorFrictionCompensation(j+1, fabs(velocity));
+                          motor_torque = int16(command*TWITTER_CURRENT_TORQUE_RATIO);
+                          motor_torque = motor_torque + motor_directions[j]*(motor_friction_proportion[j]+ friction_of_pos[j][position_in_degree])*getMotorFrictionCompensation(j+1, fabs(velocity));
                         }
                       else if (command < 0.0) {
-                          motor_torque = motor_torque = int16(command*TWITTER_CURRENT_TORQUE_RATIO);
-                          motor_torque = motor_torque + (motor_friction_proportion[j] + friction_of_pos[j][position_in_degree])*getMotorFrictionCompensation(j+1, -fabs(velocity));
+                          motor_torque = int16(command*TWITTER_CURRENT_TORQUE_RATIO);
+                          motor_torque = motor_torque + motor_directions[j]*(motor_friction_proportion[j] + friction_of_pos[j][position_in_degree])*getMotorFrictionCompensation(j+1, -fabs(velocity));
                         }
                       driver_command->target_torque = motor_torque;//exchage4bytes_.int32data;
                       driver_command->max_torque = 1000;
-                      ROS_INFO("send torque in motor : %d", motor_torque);
+//                      ROS_INFO("send torque in motor : %d", motor_torque);
                       break;
                     }
                   case POSITION:
@@ -2024,19 +2076,19 @@ void RobotStateEtherCATHardwareInterface::write(const ros::Time& time, const ros
                           driver_command->control_word = 63;
                         }
 
-                      double command = joint_position_command_[j] + motor_zero_offsets[j];
+                      double command = motor_directions[j] * joint_position_command_[j] + motor_zero_offsets[j];
                       int32 command_cnts = int32(TWITTER_GEAR_RATIO * TWITTER_ENCODER_RES * command/(2 * M_PI));
                       ROS_INFO("send position in motor cnts is : %d",command_cnts);
                       driver_command->target_position = command_cnts;
                       driver_command->max_torque = 1000;
-                      ROS_INFO("recieved joint '%d' position command%f\n", j, joint_position_command_[j]);
+                      ROS_INFO("recieved joint '%d' position command%f\n", j, motor_directions[j] * joint_position_command_[j]);
                       break;
                     }
                   case VELOCITY:
                     {
                       const double vel = e_stop_active_ ? 0 : joint_velocity_command_[j];
 //                      int32 vel_cnts = TWITTER_GEAR_RATIO * TWITTER_ENCODER_RES * vel * 2 * M_PI/60;
-                      int32 vel_cnts = TWITTER_GEAR_RATIO * TWITTER_ENCODER_RES * vel / (2 * M_PI);
+                      int32 vel_cnts = motor_directions[j] * TWITTER_GEAR_RATIO * TWITTER_ENCODER_RES * vel / (2 * M_PI);
                       driver_command->target_velocity = vel_cnts;//exchage4bytes_.int32data;
                       driver_command->max_torque = 1000;
                       driver_command->control_word = GoldenTwitterControlWord::SWITCH_ON_AND_ENABLE;
@@ -2143,9 +2195,25 @@ void RobotStateEtherCATHardwareInterface::write(const ros::Time& time, const ros
 
 }
 
+
+bool RobotStateEtherCATHardwareInterface::checkPositionLimits(const int index, const double position)
+{
+  if((position > motor_max_limits[index]) || (position < motor_min_limits[index]))
+    {
+      return false;
+    }
+  return true;
+}
+
 void RobotStateEtherCATHardwareInterface::eStopActive(const bool active)
 {
   e_stop_active_ = active;
+  for(int i = 0; i<motor_disabled.size(); i++)
+    {
+      motor_disabled[i] = active;
+      if(motor_unused[i] == 1)
+        motor_disabled[i] = (bool)motor_unused[i];
+    }
 }
 
 // Register the limits of the joint specified by joint_name and joint_handle. The limits are
@@ -2583,17 +2651,17 @@ Eigen::Vector3d RobotStateEtherCATHardwareInterface::getJointFeedback(int index,
             GoldenTwitterTPDOF* driver_feedback;
             driver_feedback = (struct GoldenTwitterTPDOF*)ec_slave[index+1].inputs;
             // in rad
-            joint_state(0) = 2 * M_PI * driver_feedback->motor_position/(TWITTER_ENCODER_RES*TWITTER_GEAR_RATIO) - motor_zero_offsets[motor_count];
+            joint_state(0) = motor_directions[motor_count] * (2 * M_PI * driver_feedback->motor_position/(TWITTER_ENCODER_RES*TWITTER_GEAR_RATIO) - motor_zero_offsets[motor_count]);
             // rpm on load
 //            joint_state(1) = 60.0 * driver_feedback->motor_velocity/(TWITTER_ENCODER_RES*TWITTER_GEAR_RATIO*2*M_PI);
             // rad/s on load
-            joint_state(1)= 2*M_PI * driver_feedback->motor_velocity/(TWITTER_ENCODER_RES*TWITTER_GEAR_RATIO);
+            joint_state(1)= motor_directions[motor_count] * 2*M_PI * driver_feedback->motor_velocity/(TWITTER_ENCODER_RES*TWITTER_GEAR_RATIO);
 
             // percent of max torque
             /****************
 * TODO(Shunyao) : calibrate the torque and frictions
 ****************/
-            joint_state(2) = driver_feedback->motor_torque/TWITTER_CURRENT_TORQUE_RATIO;
+            joint_state(2) = motor_directions[motor_count] * driver_feedback->motor_torque/TWITTER_CURRENT_TORQUE_RATIO;
             break;
           }
         default:
