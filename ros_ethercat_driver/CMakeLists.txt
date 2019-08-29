@@ -158,6 +158,7 @@ add_executable(anydrive_test_node test/anydrive_test.cpp)
 add_executable(goldentwittertest_node test/goldentwittertest.cpp)
 add_executable(hardware_interface_test test/hardware_interface_test.cpp)
 add_executable(frictions_test test/frictions_test.cpp)
+add_executable(controller_manager_test_node test/controller_manager_test.cpp)
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
 ## target back to the shorter version for ease of user use
@@ -186,6 +187,10 @@ target_link_libraries(frictions_test
    ${catkin_LIBRARIES}
  )
 
+target_link_libraries(controller_manager_test_node
+  ${catkin_LIBRARIES}
+  ros_ethercat_hardware_interface
+  )
 #############
 ## Install ##
 #############
