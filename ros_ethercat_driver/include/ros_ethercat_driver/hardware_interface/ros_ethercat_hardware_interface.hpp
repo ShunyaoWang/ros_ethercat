@@ -236,6 +236,7 @@ protected:
 
   double pos_read[12], pos_write[12], vel_read[12], vel_write[12], eff_read[12],eff_write[12];
   double position[3], orinetation[4], linear_vel[3], angular_vel[3];
+  int foot_contact[4];
 //  free_gait_msgs::RobotState actual_robot_state_;
 
   std::vector<transmission_interface::TransmissionInfo> transmissions_;

@@ -231,6 +231,7 @@ bool RobotStateEtherCATHardwareInterface::init(ros::NodeHandle& root_nh, ros::No
   robot_state_data_.joint_velocity_write = vel_write;
   robot_state_data_.joint_effort_read = eff_read;
   robot_state_data_.joint_effort_write = eff_write;
+  robot_state_data_.foot_contact = foot_contact;
   //! WSHY: registerhandle pass the data point to the hardwareResourseManager and then
   //! the read() method update data which the pointer points to or write() the
   //! updated commmand
