@@ -18,7 +18,7 @@
 
 #define TWITTER_GEAR_RATIO 18.0625
 #define TWITTER_ENCODER_RES 262144
-#define TWITTER_CURRENT_TORQUE_RATIO 16.67 //1000 means max current 25[Amp]
+#define TWITTER_CURRENT_TORQUE_RATIO 16.67 //1000/60(Nm); 1000 means max current 25[Amp]
 
 
 
@@ -159,11 +159,16 @@ struct GoldenTwitterTPDOE{
 
 
 struct GoldenTwitterTPDOF{
+
   int32_t motor_velocity; // cnts/sec     0x6069
   int32_t motor_position; // double rad       0x6064
   int16_t motor_torque;//                     0x6077
+  int16_t analog_input; // mv 0x2205
+  int32_t contact_pressure; // mv 0x20A0, use the driver's LP filter to filter analog input and map to 20A0
   uint16_t status_word;   // uint16           0x6041
   int8_t mode_of_opreration; //              0x6061
+//  int32_t motor_velocity; // cnts/sec     0x6069
+
 };
 
 #endif // GOLDENTWITTER_HPP
