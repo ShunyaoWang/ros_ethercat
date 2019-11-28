@@ -245,6 +245,7 @@ bool RobotStateEtherCATHardwareInterface::init(ros::NodeHandle& root_nh, ros::No
   robot_state_data_.foot_contact = foot_contact;
   robot_state_data_.contact_pressure = contact_pressure;
   robot_state_data_.motor_status_word = motor_status_word;
+  robot_state_data_.mode_of_joint = mode_of_joint;
   //! WSHY: registerhandle pass the data point to the hardwareResourseManager and then
   //! the read() method update data which the pointer points to or write() the
   //! updated commmand
@@ -406,6 +407,7 @@ bool RobotStateEtherCATHardwareInterface::init(ros::NodeHandle& root_nh, ros::No
            joint_handle = hardware_interface::JointHandle(js_interface_.getHandle(joint_names_[j]),
                                                           &joint_position_command_[j]);
            pj_interface_.registerHandle(joint_handle);
+           robot_state_interface_.joint_position_interfaces_.registerHandle(joint_handle);
 //         }
 //       else
 //       {
@@ -950,6 +952,7 @@ bool RobotStateEtherCATHardwareInterface::setCommand(int id, const std::string& 
 
 bool RobotStateEtherCATHardwareInterface::setModeOfOperation(int id, const std::string& mode_of_operation)
 {
+//  for(int i = 0;i<joint_control_methods_.size())
   SlaveType type = slaves_type_[id];
   if(type == SlaveType::ANYDRIVE)
     {
@@ -1058,39 +1061,39 @@ bool RobotStateEtherCATHardwareInterface::setModeOfOperation(int id, const std::
 bool RobotStateEtherCATHardwareInterface::setControlMethod(const std::string& method)
 {
 
-  if(method == "Joint Position")
+  int junction_count = 0;
+  for(int i = 0;i<ec_slavecount;i++)
     {
-      for(int i = 0;i<ec_slavecount;i++)
+      if(slaves_type_[i] == GOLDENTWITTER || slaves_type_[i] == ANYDRIVE)
         {
-          joint_control_methods_[i] = POSITION;
-          setModeOfOperation(i, "Position");
+          int j = i - junction_count;
+
+          if(method == "Joint Position")
+            {
+              joint_control_methods_[j] = POSITION;
+              setModeOfOperation(i, "Position");
+              robot_state_data_.mode_of_joint[j] = 0;
+            }
+          if(method == "Joint Cyclic Position")
+            {
+              joint_control_methods_[j] = SYNC_POSITION;
+              setModeOfOperation(i, "Cyclic Position");
+              robot_state_data_.mode_of_joint[j] = 8;
+            }else if (method == "Joint Velocity") {
+              joint_control_methods_[j] = VELOCITY;
+              setModeOfOperation(i, "Velocity");
+              robot_state_data_.mode_of_joint[j] = 0;
+            }else if (method == "Joint Effort" || method == "Balance") {
+              joint_control_methods_[j] = EFFORT;
+              setModeOfOperation(i, "Torque");
+              robot_state_data_.mode_of_joint[j] = 10;
+            }
+        }else{
+          junction_count++;
         }
-      return true;
+
     }
-  if(method == "Joint Cyclic Position")
-    {
-      for(int i = 0;i<ec_slavecount;i++)
-        {
-          joint_control_methods_[i] = POSITION;
-          setModeOfOperation(i, "Cyclic Position");
-        }
-      return true;
-    }else if (method == "Joint Velocity") {
-      for(int i = 0;i<ec_slavecount;i++)
-        {
-          joint_control_methods_[i] = VELOCITY;
-          setModeOfOperation(i, "Velocity");
-        }
-      return true;
-    }else if (method == "Joint Effort" || method == "Balance") {
-      for(int i = 0;i<ec_slavecount;i++)
-        {
-          joint_control_methods_[i] = EFFORT;
-          setModeOfOperation(i, "Torque");
-        }
-      return true;
-    }
-  return false;
+  return  false;
 }
 
 bool RobotStateEtherCATHardwareInterface::InitSlaves(const std::vector<SlaveType>& slave_type)
@@ -2007,7 +2010,7 @@ void RobotStateEtherCATHardwareInterface::write(const ros::Time& time, const ros
 //                motor_disabled[j] = (bool)motor_unused[j];
                 if(!checkPositionLimits(j, joint_position_[j])&&!((bool)motor_unused[j]))
                   {
-                    ROS_WARN("Joint %d Position is Out Of Limit!!!",j);
+                    ROS_WARN_ONCE("Joint %d Position is Out Of Limit!!!",j);
 //                    std::cout<<"joint position of "<<j<<" is "<<joint_position_[j]<<std::endl;
 //                    std::cout<<"joint limits of "<<j<<" is ("<<motor_max_limits[j]<<", "<<motor_min_limits[j]<<")"<<std::endl;
                     motor_disabled[j] = true;
@@ -2032,7 +2035,7 @@ void RobotStateEtherCATHardwareInterface::write(const ros::Time& time, const ros
                         setModeOfOperation(i, "Velocity");
                         break;
                       }
-//                    ROS_INFO("Restore to oringinal control method");
+                    ROS_INFO_ONCE("Restore to oringinal control method for joint %d",j);
                   }
                 e_stop_active_ = motor_disabled[j];
                 if(e_stop_active_)
@@ -2075,6 +2078,22 @@ void RobotStateEtherCATHardwareInterface::write(const ros::Time& time, const ros
                     }
                   }
 
+                if(robot_state_data_.mode_of_joint[j] == GoldenTwitterModeOfOperation::SYNC_POSITION)
+                  {
+                    joint_control_methods_[j] = SYNC_POSITION;
+                  }
+                if(robot_state_data_.mode_of_joint[j] == GoldenTwitterModeOfOperation::SYNC_TORQUE)
+                  {
+                    joint_control_methods_[j] = EFFORT;
+                  }
+                if(robot_state_data_.mode_of_joint[j] == GoldenTwitterModeOfOperation::PROFILE_POSITION)
+                  {
+                    joint_control_methods_[j] = POSITION;
+                  }
+                if(robot_state_data_.mode_of_joint[j] == GoldenTwitterModeOfOperation::PROFILE_TORQUE)
+                  {
+                    joint_control_methods_[j] = PROFILE_TORQUE;
+                  }
                 switch (joint_control_methods_[j])
                   {
                   case EFFORT:
@@ -2109,8 +2128,40 @@ void RobotStateEtherCATHardwareInterface::write(const ros::Time& time, const ros
 //                      ROS_INFO("send torque in motor : %d", motor_torque);
                       break;
                     }
+                  case PROFILE_TORQUE:
+                    {
+                      driver_command->mode_of_operation = GoldenTwitterModeOfOperation::PROFILE_TORQUE;
+                      double velocity = joint_velocity_[j];
+                      double position_in_rad = motor_directions[j]*joint_position_[j] + motor_zero_offsets[j];
+                      double position_in_2pi = angles::normalize_angle_positive(position_in_rad);
+                      int position_in_degree = int(180*position_in_2pi/M_PI);//int(360*fmod(position_in_rad,2*M_PI)/(2*M_PI));
+
+
+//                      position_in_degree = position_in_degree%360;
+
+                      const double effort = e_stop_active_ ? 0 : joint_effort_command_[j];
+                      double command = motor_torque_coe*motor_directions[j]*effort;
+//                      ROS_INFO("recieved joint '%d' torque command%f\n", j, effort);
+                      int16 motor_torque = int16(command*TWITTER_CURRENT_TORQUE_RATIO);
+
+                      if(motor_torque==0) //id-1 to consider first junction slave
+                        motor_torque = motor_torque + motor_directions[j]*(motor_friction_proportion[j] + friction_of_pos[j][position_in_degree])*getMotorFrictionCompensation(j+1, velocity);
+                      else if(command > 0.0)
+                        {
+                          motor_torque = int16(command*TWITTER_CURRENT_TORQUE_RATIO);
+//                          motor_torque = motor_torque + motor_directions[j]*(motor_friction_proportion[j]+ friction_of_pos[j][position_in_degree])*getMotorFrictionCompensation(j+1, fabs(velocity));
+                        }
+                      else if (command < 0.0) {
+                          motor_torque = int16(command*TWITTER_CURRENT_TORQUE_RATIO);
+//                          motor_torque = motor_torque + motor_directions[j]*(motor_friction_proportion[j] + friction_of_pos[j][position_in_degree])*getMotorFrictionCompensation(j+1, -fabs(velocity));
+                        }
+                      driver_command->target_torque = motor_torque;//exchage4bytes_.int32data;
+                      driver_command->max_torque = max_torque;
+                      break;
+                    }
                   case POSITION:
                     {
+                      driver_command->mode_of_operation = GoldenTwitterModeOfOperation::PROFILE_POSITION;
 //                      GoldenTwitterTPDOF* driver_feedback;
 //                      driver_feedback = (struct GoldenTwitterTPDOF*)ec_slave[i +1].inputs;
 
@@ -2129,6 +2180,16 @@ void RobotStateEtherCATHardwareInterface::write(const ros::Time& time, const ros
                       driver_command->target_position = command_cnts;
                       driver_command->max_torque = max_torque;
 //                      ROS_INFO("recieved joint '%d' position command%f\n", j, motor_directions[j] * joint_position_command_[j]);
+                      break;
+                    }
+                  case SYNC_POSITION:
+                    {
+                      driver_command->mode_of_operation = GoldenTwitterModeOfOperation::SYNC_POSITION;
+                      double command = motor_directions[j] * joint_position_command_[j] + motor_zero_offsets[j];
+                      int32 command_cnts = int32(TWITTER_GEAR_RATIO * TWITTER_ENCODER_RES * command/(2 * M_PI));
+//                      ROS_INFO("send position in motor cnts is : %d",command_cnts);
+                      driver_command->target_position = command_cnts;
+                      driver_command->max_torque = max_torque;
                       break;
                     }
                   case VELOCITY:

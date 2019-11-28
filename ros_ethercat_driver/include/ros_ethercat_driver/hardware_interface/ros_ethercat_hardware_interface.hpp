@@ -168,7 +168,7 @@ protected:
   std::vector<std::vector<double>> friction_of_pos;
   double motor_torque_coe, max_torque;
   // Methods used to control a joint.
-  enum ControlMethod {EFFORT, POSITION, POSITION_PID, VELOCITY, VELOCITY_PID, STANCE_LEG, FREEZE};
+  enum ControlMethod {EFFORT, POSITION, SYNC_POSITION, PROFILE_TORQUE, POSITION_PID, VELOCITY, VELOCITY_PID, STANCE_LEG, FREEZE};
 
   // Register the limits of the joint specified by joint_name and joint_handle. The limits are
   // retrieved from joint_limit_nh. If urdf_model is not NULL, limits are retrieved from it also.
@@ -237,7 +237,7 @@ protected:
 
   double pos_read[12], pos_write[12], vel_read[12], vel_write[12], eff_read[12],eff_write[12];
   double position[3], orinetation[4], linear_vel[3], angular_vel[3], contact_pressure[4];
-  int foot_contact[4], motor_status_word[12];
+  int foot_contact[4], motor_status_word[12], mode_of_joint[12];
 //  free_gait_msgs::RobotState actual_robot_state_;
 
   std::vector<transmission_interface::TransmissionInfo> transmissions_;
